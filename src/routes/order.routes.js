@@ -1,18 +1,44 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   createOrder,
-  getOrders,
+  getAllOrders,
+  getUserOrders,
   updateOrderStatus,
 } = require("../controllers/order.controller");
 
 const { adminAuth } = require("../middlewares/auth.middleware");
 
-// Public (User checkout)
+// USER
 router.post("/", createOrder);
+router.get("/my", getUserOrders); // ?phone=xxxxxxxxxx
 
-// Admin protected
-router.get("/", adminAuth, getOrders);
+// ADMIN
+router.get("/", adminAuth, getAllOrders);
 router.put("/:id", adminAuth, updateOrderStatus);
 
 module.exports = router;
+
+
+// const express = require("express");
+// const router = express.Router();
+
+// const {
+//   createOrder,
+//   getAllOrders,
+//   getUserOrders,
+//   updateOrderStatus,
+// } = require("../controllers/order.controller");
+
+// const { adminAuth } = require("../middlewares/auth.middleware");
+
+// // USER
+// router.post("/", createOrder);
+// router.get("/my", getUserOrders); // ✅ USER ORDERS
+
+// // ADMIN
+// router.get("/", adminAuth, getAllOrders);
+// router.put("/:id", adminAuth, updateOrderStatus);
+
+// module.exports = router;
