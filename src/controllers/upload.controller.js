@@ -1,3 +1,5 @@
+// src/controllers/upload.controller.js
+
 const cloudinary = require("../config/cloudinary");
 
 exports.uploadImage = async (req, res) => {

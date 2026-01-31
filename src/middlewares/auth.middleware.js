@@ -1,3 +1,4 @@
+// src/middlewares/auth.middleware.js
 const jwt = require("jsonwebtoken");
 
 exports.adminAuth = (req, res, next) => {

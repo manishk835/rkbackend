@@ -1,37 +1,15 @@
+// src/controllers/product.controller.js
 const Product = require("../models/Product");
 
-/**
- * CREATE PRODUCT (ADMIN)
- */
+/* ======================================================
+   CREATE PRODUCT (ADMIN)
+   ====================================================== */
 exports.createProduct = async (req, res) => {
   try {
-    const {
-      title,
-      slug,
-      price,
-      originalPrice,
-      image,
-      category,
-      inStock,
-    } = req.body;
-
-    if (!title || !slug || !price || !image || !category) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const existing = await Product.findOne({ slug });
-    if (existing) {
-      return res.status(409).json({ message: "Slug already exists" });
-    }
-
     const product = await Product.create({
-      title,
-      slug,
-      price,
-      originalPrice,
-      image,
-      category,
-      inStock,
+      ...req.body,
+      category: req.body.category?.toLowerCase(),
+      subCategory: req.body.subCategory?.toLowerCase(),
     });
 
     res.status(201).json(product);
@@ -41,33 +19,112 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-/**
- * GET ALL PRODUCTS (PUBLIC)
- */
+/* ======================================================
+   GET ALL PRODUCTS (PUBLIC)
+   ====================================================== */
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
+};
+
+/* ======================================================
+   GET PRODUCT BY SLUG
+   ====================================================== */
+exports.getProductBySlug = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      slug: req.params.slug,
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    res.json(product);
+  } catch (err) {
     res.status(500).json({ message: "Fetch failed" });
   }
 };
 
-/**
- * DELETE PRODUCT (ADMIN)
- */
-exports.deleteProduct = async (req, res) => {
+/* ======================================================
+   GET PRODUCT BY ID
+   ====================================================== */
+exports.getProductById = async (req, res) => {
   try {
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ message: "Product deleted" });
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    res.json(product);
   } catch (err) {
-    res.status(500).json({ message: "Delete failed" });
+    res.status(500).json({ message: "Fetch failed" });
   }
 };
 
-/**
- * SEARCH PRODUCTS
- */
+/* ======================================================
+   GET PRODUCTS BY CATEGORY + SORTING
+   URL:
+   /api/products/category/men
+   /api/products/category/men?type=shirt
+   /api/products/category/men?sort=price-low
+   ====================================================== */
+exports.getProductsByCategory = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const { type, sort } = req.query;
+
+    /* ================= FILTER ================= */
+    const filter = {
+      category: category.toLowerCase(),
+    };
+
+    if (type) {
+      filter.subCategory = type.toLowerCase();
+    }
+
+    /* ================= SORT ================= */
+    let sortQuery = { createdAt: -1 }; // default
+
+    switch (sort) {
+      case "az":
+        sortQuery = { title: 1 };
+        break;
+
+      case "price-low":
+        sortQuery = { price: 1 };
+        break;
+
+      case "price-high":
+        sortQuery = { price: -1 };
+        break;
+
+      case "newest":
+        sortQuery = { createdAt: -1 };
+        break;
+
+      default:
+        sortQuery = { createdAt: -1 };
+    }
+
+    const products = await Product.find(filter).sort(sortQuery);
+
+    res.json(products);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
+};
+
+/* ======================================================
+   SEARCH PRODUCTS
+   ====================================================== */
 exports.searchProducts = async (req, res) => {
   try {
     const q = req.query.q || "";
@@ -78,36 +135,126 @@ exports.searchProducts = async (req, res) => {
 
     res.json(products);
   } catch (err) {
-    res.status(500).json({ message: "Search failed" });
+    res.status(500).json([]);
   }
 };
 
-/**
- * CATEGORY + FILTER
- */
-exports.getProductsByCategory = async (req, res) => {
-  try {
-    const { category } = req.params;
-    const { minPrice, maxPrice, inStock } = req.query;
 
-    const filter = { category };
+// // src/controllers/product.controller.js
+// const Product = require("../models/Product");
 
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
-    }
+// /* ======================================================
+//    CREATE PRODUCT (ADMIN)
+//    ====================================================== */
+// exports.createProduct = async (req, res) => {
+//   try {
+//     const product = await Product.create({
+//       ...req.body,
+//       category: req.body.category?.toLowerCase(),
+//       subCategory: req.body.subCategory?.toLowerCase(),
+//     });
 
-    if (inStock === "true") {
-      filter.inStock = true;
-    }
+//     res.status(201).json(product);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Product create failed" });
+//   }
+// };
 
-    const products = await Product.find(filter).sort({
-      createdAt: -1,
-    });
+// /* ======================================================
+//    GET ALL PRODUCTS (PUBLIC)
+//    ====================================================== */
+// exports.getProducts = async (req, res) => {
+//   try {
+//     const products = await Product.find().sort({ createdAt: -1 });
+//     // ✅ always array
+//     res.json(products);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json([]);
+//   }
+// };
 
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ message: "Filter fetch failed" });
-  }
-};
+// /* ======================================================
+//    GET PRODUCT BY SLUG
+//    ====================================================== */
+// exports.getProductBySlug = async (req, res) => {
+//   try {
+//     const product = await Product.findOne({
+//       slug: req.params.slug,
+//     });
+
+//     if (!product) {
+//       return res.status(404).json({ message: "Product not found" });
+//     }
+
+//     res.json(product);
+//   } catch (err) {
+//     res.status(500).json({ message: "Fetch failed" });
+//   }
+// };
+
+// /* ======================================================
+//    GET PRODUCT BY ID
+//    ====================================================== */
+// exports.getProductById = async (req, res) => {
+//   try {
+//     const product = await Product.findById(req.params.id);
+
+//     if (!product) {
+//       return res.status(404).json({ message: "Product not found" });
+//     }
+
+//     res.json(product);
+//   } catch (err) {
+//     res.status(500).json({ message: "Fetch failed" });
+//   }
+// };
+
+// /* ======================================================
+//    CATEGORY + SUBCATEGORY
+//    URL:
+//    /api/products/category/men
+//    /api/products/category/men?type=kurta
+//    ====================================================== */
+// exports.getProductsByCategory = async (req, res) => {
+//   try {
+//     const { category } = req.params;
+//     const { type } = req.query;
+
+//     const filter = {
+//       category: category.toLowerCase(),
+//     };
+
+//     // ✅ THIS FIXES "Men → Kurta shows Shirts"
+//     if (type) {
+//       filter.subCategory = type.toLowerCase();
+//     }
+
+//     const products = await Product.find(filter).sort({
+//       createdAt: -1,
+//     });
+
+//     res.json(products);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json([]);
+//   }
+// };
+
+// /* ======================================================
+//    SEARCH PRODUCTS
+//    ====================================================== */
+// exports.searchProducts = async (req, res) => {
+//   try {
+//     const q = req.query.q || "";
+
+//     const products = await Product.find({
+//       title: { $regex: q, $options: "i" },
+//     }).sort({ createdAt: -1 });
+
+//     res.json(products);
+//   } catch (err) {
+//     res.status(500).json([]);
+//   }
+// };
