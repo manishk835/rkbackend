@@ -6,16 +6,22 @@ const Product = require("../models/Product");
    ====================================================== */
    exports.createProduct = async (req, res) => {
     try {
-      const { variants } = req.body;
+      const { variants, thumbnail } = req.body;
+  
+      /* ================= THUMBNAIL VALIDATION ================= */
+      if (!thumbnail) {
+        return res.status(400).json({
+          message: "Thumbnail image is required",
+        });
+      }
   
       /* ================= SKU VALIDATION ================= */
       if (variants && variants.length > 0) {
         const skus = variants.map((v) => v.sku);
   
-        const duplicateSkus =
-          skus.filter(
-            (sku, i) => skus.indexOf(sku) !== i
-          );
+        const duplicateSkus = skus.filter(
+          (sku, i) => skus.indexOf(sku) !== i
+        );
   
         if (duplicateSkus.length > 0) {
           return res.status(400).json({
@@ -25,7 +31,6 @@ const Product = require("../models/Product");
           });
         }
   
-        // 🔒 check SKU already exists in DB
         const existing = await Product.findOne({
           "variants.sku": { $in: skus },
         });
@@ -41,18 +46,26 @@ const Product = require("../models/Product");
       const product = await Product.create({
         ...req.body,
         category: req.body.category?.toLowerCase(),
-        subCategory:
-          req.body.subCategory?.toLowerCase(),
+        subCategory: req.body.subCategory?.toLowerCase(),
       });
   
       res.status(201).json(product);
     } catch (err) {
       console.error("CREATE PRODUCT ERROR:", err);
+  
+      // 🔥 better error message for validation
+      if (err.name === "ValidationError") {
+        return res.status(400).json({
+          message: err.message,
+        });
+      }
+  
       res.status(500).json({
-        message: err.message || "Product create failed",
+        message: "Product create failed",
       });
     }
   };
+  
 
   /* ======================================================
    UPDATE PRODUCT (ADMIN)
@@ -166,39 +179,187 @@ exports.getProductById = async (req, res) => {
   }
 };
 
+
 /* ======================================================
-   GET PRODUCTS BY CATEGORY + SORTING
+   GET PRODUCTS BY CATEGORY + FILTERS 
    ====================================================== */
-exports.getProductsByCategory = async (req, res) => {
-  try {
-    const { category } = req.params;
-    const { type, sort } = req.query;
-
-    /* ================= FILTER ================= */
-    const filter = {
-      category: category.toLowerCase(),
-    };
-
-    if (type) {
-      filter.subCategory = type.toLowerCase();
+   exports.getProductsByCategory = async (req, res) => {
+    try {
+      const { category } = req.params;
+      const {
+        type,
+        sort,
+        brand,
+        size,
+        color,
+        minPrice,
+        maxPrice,
+        rating,
+      } = req.query;
+  
+      /* ================= BASE FILTER ================= */
+      const filter = {
+        category: category.toLowerCase(),
+        isActive: true,
+      };
+  
+      /* ================= SUB CATEGORY ================= */
+      if (type) {
+        const typesArray = type.split(",");
+        filter.subCategory = { $in: typesArray };
+      }
+  
+      /* ================= BRAND ================= */
+      if (brand) {
+        const brandsArray = brand.split(",");
+        filter.brand = { $in: brandsArray };
+      }
+  
+      /* ================= SIZE ================= */
+      if (size) {
+        const sizeArray = size.split(",");
+        filter["variants.size"] = { $in: sizeArray };
+      }
+  
+      /* ================= COLOR ================= */
+      if (color) {
+        const colorArray = color.split(",");
+        filter["variants.color"] = { $in: colorArray };
+      }
+  
+      /* ================= PRICE ================= */
+      if (minPrice || maxPrice) {
+        filter.price = {};
+        if (minPrice)
+          filter.price.$gte = Number(minPrice);
+        if (maxPrice)
+          filter.price.$lte = Number(maxPrice);
+      }
+  
+      /* ================= RATING ================= */
+      if (rating) {
+        filter.rating = { $gte: Number(rating) };
+      }
+  
+      /* ================= SORT ================= */
+      let sortQuery = { createdAt: -1 };
+  
+      if (sort === "az") sortQuery = { title: 1 };
+      if (sort === "price-low") sortQuery = { price: 1 };
+      if (sort === "price-high") sortQuery = { price: -1 };
+      if (sort === "newest") sortQuery = { createdAt: -1 };
+      if (sort === "rating") sortQuery = { rating: -1 };
+  
+      /* ================= PRODUCTS ================= */
+      const products = await Product.find(filter).sort(
+        sortQuery
+      );
+  
+      /* =================================================
+         FILTER DATA (WITH COUNTS)
+         ================================================= */
+  
+      const baseMatch = {
+        category: category.toLowerCase(),
+        isActive: true,
+      };
+  
+      const brands = await Product.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: "$brand",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+  
+      const subCategories = await Product.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: "$subCategory",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+  
+      const sizes = await Product.aggregate([
+        { $match: baseMatch },
+        { $unwind: "$variants" },
+        {
+          $group: {
+            _id: "$variants.size",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+  
+      const colors = await Product.aggregate([
+        { $match: baseMatch },
+        { $unwind: "$variants" },
+        {
+          $group: {
+            _id: "$variants.color",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+  
+      const priceAgg = await Product.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: null,
+            minPrice: { $min: "$price" },
+            maxPrice: { $max: "$price" },
+          },
+        },
+      ]);
+  
+      return res.json({
+        products,
+        filters: {
+          brands,        // [{ _id: "rk fashion", count: 12 }]
+          subCategories, // [{ _id: "kurta", count: 8 }]
+          sizes,         // [{ _id: "M", count: 15 }]
+          colors,        // [{ _id: "black", count: 10 }]
+          ratings: [4, 3, 2, 1], // frontend use kare
+          priceRange:
+            priceAgg[0] || {
+              minPrice: 0,
+              maxPrice: 0,
+            },
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Get Products By Category Error:",
+        error
+      );
+      return res.status(500).json({
+        products: [],
+        filters: {
+          brands: [],
+          subCategories: [],
+          sizes: [],
+          colors: [],
+          ratings: [],
+          priceRange: {
+            minPrice: 0,
+            maxPrice: 0,
+          },
+        },
+      });
     }
-
-    /* ================= SORT ================= */
-    let sortQuery = { createdAt: -1 };
-
-    if (sort === "az") sortQuery = { title: 1 };
-    if (sort === "price-low") sortQuery = { price: 1 };
-    if (sort === "price-high") sortQuery = { price: -1 };
-    if (sort === "newest") sortQuery = { createdAt: -1 };
-
-    const products = await Product.find(filter).sort(sortQuery);
-
-    return res.json(products);
-  } catch (error) {
-    console.error("Get Products By Category Error:", error);
-    return res.status(500).json([]);
-  }
-};
+  };
+  
+  
+  
 
 /* ======================================================
    SEARCH PRODUCTS
@@ -217,146 +378,3 @@ exports.searchProducts = async (req, res) => {
     return res.status(500).json([]);
   }
 };
-
-
-// // src/controllers/product.controller.js
-// const Product = require("../models/Product");
-
-// /* ======================================================
-//    CREATE PRODUCT (ADMIN)
-//    ====================================================== */
-// exports.createProduct = async (req, res) => {
-//   try {
-//     const product = await Product.create({
-//       ...req.body,
-//       category: req.body.category?.toLowerCase(),
-//       subCategory: req.body.subCategory?.toLowerCase(),
-//     });
-
-//     res.status(201).json(product);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Product create failed" });
-//   }
-// };
-
-// /* ======================================================
-//    GET ALL PRODUCTS (PUBLIC)
-//    ====================================================== */
-// exports.getProducts = async (req, res) => {
-//   try {
-//     const products = await Product.find().sort({ createdAt: -1 });
-//     res.json(products);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json([]);
-//   }
-// };
-
-// /* ======================================================
-//    GET PRODUCT BY SLUG
-//    ====================================================== */
-// exports.getProductBySlug = async (req, res) => {
-//   try {
-//     const product = await Product.findOne({
-//       slug: req.params.slug,
-//     });
-
-//     if (!product) {
-//       return res.status(404).json({ message: "Product not found" });
-//     }
-
-//     res.json(product);
-//   } catch (err) {
-//     res.status(500).json({ message: "Fetch failed" });
-//   }
-// };
-
-// /* ======================================================
-//    GET PRODUCT BY ID
-//    ====================================================== */
-// exports.getProductById = async (req, res) => {
-//   try {
-//     const product = await Product.findById(req.params.id);
-
-//     if (!product) {
-//       return res.status(404).json({ message: "Product not found" });
-//     }
-
-//     res.json(product);
-//   } catch (err) {
-//     res.status(500).json({ message: "Fetch failed" });
-//   }
-// };
-
-// /* ======================================================
-//    GET PRODUCTS BY CATEGORY + SORTING
-//    URL:
-//    /api/products/category/men
-//    /api/products/category/men?type=shirt
-//    /api/products/category/men?sort=price-low
-//    ====================================================== */
-// exports.getProductsByCategory = async (req, res) => {
-//   try {
-//     const { category } = req.params;
-//     const { type, sort } = req.query;
-
-//     /* ================= FILTER ================= */
-//     const filter = {
-//       category: category.toLowerCase(),
-//     };
-
-//     if (type) {
-//       filter.subCategory = type.toLowerCase();
-//     }
-
-//     /* ================= SORT ================= */
-//     let sortQuery = { createdAt: -1 }; // default
-
-//     switch (sort) {
-//       case "az":
-//         sortQuery = { title: 1 };
-//         break;
-
-//       case "price-low":
-//         sortQuery = { price: 1 };
-//         break;
-
-//       case "price-high":
-//         sortQuery = { price: -1 };
-//         break;
-
-//       case "newest":
-//         sortQuery = { createdAt: -1 };
-//         break;
-
-//       default:
-//         sortQuery = { createdAt: -1 };
-//     }
-
-//     const products = await Product.find(filter).sort(sortQuery);
-
-//     res.json(products);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json([]);
-//   }
-// };
-
-// /* ======================================================
-//    SEARCH PRODUCTS
-//    ====================================================== */
-// exports.searchProducts = async (req, res) => {
-//   try {
-//     const q = req.query.q || "";
-
-//     const products = await Product.find({
-//       title: { $regex: q, $options: "i" },
-//     }).sort({ createdAt: -1 });
-
-//     res.json(products);
-//   } catch (err) {
-//     res.status(500).json([]);
-//   }
-// };
-

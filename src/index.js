@@ -22,6 +22,8 @@ app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/payment", require("./routes/payment.routes")); // 🔥 RAZORPAY ROUTE
 app.use("/api/upload", require("./routes/upload.routes"));
 app.use("/api/address", require("./routes/address")); // (agar address route hai)
+app.use("/api/categories", require("./routes/category.routes"));
+
 
 // 🔹 Test route
 app.get("/", (req, res) => {
