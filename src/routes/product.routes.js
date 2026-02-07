@@ -9,18 +9,24 @@ const {
   getProductById,
   searchProducts,
   getProductsByCategory,
+  updateProduct, // ✅ IMPORT ADDED
 } = require("../controllers/product.controller");
 
 const { adminAuth } = require("../middlewares/auth.middleware");
 
-// PUBLIC
+/* ======================================================
+   PUBLIC ROUTES
+   ====================================================== */
 router.get("/", getProducts);
 router.get("/search", searchProducts);
+router.get("/category/:category", getProductsByCategory);
 router.get("/slug/:slug", getProductBySlug);
 router.get("/id/:id", getProductById);
-router.get("/category/:category", getProductsByCategory);
 
-// ADMIN
+/* ======================================================
+   ADMIN ROUTES
+   ====================================================== */
 router.post("/", adminAuth, createProduct);
+router.put("/:id", adminAuth, updateProduct);
 
 module.exports = router;

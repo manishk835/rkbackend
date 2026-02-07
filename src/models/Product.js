@@ -5,15 +5,13 @@ const mongoose = require("mongoose");
 const variantSchema = new mongoose.Schema(
   {
     size: {
-      type: String, // S, M, L, XL, 2XL, 8, 9 etc.
+      type: String,
       required: true,
     },
-
     color: {
-      type: String, // Green, Black
+      type: String,
       required: true,
     },
-
     stock: {
       type: Number,
       default: 0,
@@ -22,13 +20,10 @@ const variantSchema = new mongoose.Schema(
     sku: {
       type: String,
       required: true,
-      unique: true,
+      uppercase: true,
     },
-
-    priceOverride: {
-      type: Number, // agar kisi size/color ka price alag ho
-    },
-
+    
+    priceOverride: Number,
     isActive: {
       type: Boolean,
       default: true,
@@ -40,10 +35,7 @@ const variantSchema = new mongoose.Schema(
 /* ================= IMAGE SCHEMA ================= */
 const imageSchema = new mongoose.Schema(
   {
-    url: {
-      type: String,
-      required: true,
-    },
+    url: { type: String, required: true },
     alt: String,
     order: Number,
   },
@@ -68,10 +60,7 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
-    brand: {
-      type: String,
-      trim: true,
-    },
+    brand: String,
 
     shortDescription: {
       type: String,
@@ -110,6 +99,8 @@ const productSchema = new mongoose.Schema(
     discountPercent: {
       type: Number,
       default: 0,
+      min: 0,
+      max: 100,
     },
 
     currency: {
@@ -174,9 +165,7 @@ const productSchema = new mongoose.Schema(
       default: 7,
     },
 
-    deliveryEstimate: {
-      type: String, // "2-4 business days"
-    },
+    deliveryEstimate: String,
 
     /* ================= RATINGS ================= */
     rating: {
@@ -219,7 +208,7 @@ const productSchema = new mongoose.Schema(
     /* ================= META ================= */
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // future admin
+      ref: "User",
     },
   },
   {
@@ -230,149 +219,58 @@ const productSchema = new mongoose.Schema(
 /* ================= INDEXES ================= */
 productSchema.index({ title: "text", tags: "text" });
 
+/* ================= MIDDLEWARE ================= */
+
+// 🔹 Auto slug generate (if not provided)
+productSchema.pre("validate", function () {
+  if (!this.slug && this.title) {
+    this.slug = this.title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+});
+
+// 🔹 Auto calculate stock (CREATE + SAVE)
+productSchema.pre("save", function () {
+  if (Array.isArray(this.variants)) {
+    this.totalStock = this.variants.reduce(
+      (sum, v) => sum + (Number(v.stock) || 0),
+      0
+    );
+    this.inStock = this.totalStock > 0;
+  }
+});
+
+// 🔹 Auto calculate stock (UPDATE)
+productSchema.pre("findOneAndUpdate", function () {
+  const update = this.getUpdate();
+
+  if (update?.variants && Array.isArray(update.variants)) {
+    const totalStock = update.variants.reduce(
+      (sum, v) => sum + (Number(v.stock) || 0),
+      0
+    );
+
+    update.totalStock = totalStock;
+    update.inStock = totalStock > 0;
+    this.setUpdate(update);
+  }
+});
+
+// 🔹 Auto-generate SKU if missing
+productSchema.pre("validate", function () {
+  if (this.variants && this.variants.length > 0) {
+    this.variants.forEach((v, i) => {
+      if (!v.sku && this.slug) {
+        v.sku = `${this.slug.toUpperCase()}-${
+          v.size || "NA"
+        }-${v.color || "NA"}-${i + 1}`;
+      }
+    });
+  }
+});
+
+
 module.exports = mongoose.model("Product", productSchema);
-
-
-// const mongoose = require("mongoose");
-
-// const productSchema = new mongoose.Schema(
-//   {
-//     /* ================= BASIC INFO ================= */
-//     title: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//     },
-
-//     slug: {
-//       type: String,
-//       required: true,
-//       unique: true,
-//       lowercase: true,
-//       index: true,
-//     },
-
-//     description: {
-//       type: String,
-//       required: true,
-//     },
-
-//     brand: {
-//       type: String,
-//       trim: true,
-//     },
-
-//     /* ================= PRICING ================= */
-//     price: {
-//       type: Number,
-//       required: true,
-//     },
-
-//     originalPrice: {
-//       type: Number,
-//     },
-
-//     discountPercent: {
-//       type: Number,
-//       default: 0,
-//     },
-
-//     /* ================= IMAGES ================= */
-//     images: [
-//       {
-//         url: String,
-//         alt: String,
-//       },
-//     ],
-
-//     thumbnail: {
-//       type: String,
-//       required: true,
-//     },
-
-//     /* ================= CATEGORY ================= */
-//     category: {
-//       type: String,
-//       required: true,
-//       lowercase: true,
-//       index: true,
-//     },
-
-//     subCategory: {
-//       type: String,
-//       lowercase: true,
-//       index: true,
-//     },
-
-//     tags: [String],
-
-//     /* ================= VARIANTS ================= */
-//     variants: [
-//       {
-//         size: String,        // S, M, L, XL
-//         color: String,       // Red, Black
-//         stock: Number,
-//         sku: String,
-//       },
-//     ],
-
-//     /* ================= STOCK ================= */
-//     totalStock: {
-//       type: Number,
-//       default: 0,
-//     },
-
-//     inStock: {
-//       type: Boolean,
-//       default: true,
-//     },
-
-//     /* ================= FLAGS ================= */
-//     isFeatured: {
-//       type: Boolean,
-//       default: false,
-//     },
-
-//     isNewArrival: {
-//       type: Boolean,
-//       default: false,
-//     },
-
-//     isBestSeller: {
-//       type: Boolean,
-//       default: false,
-//     },
-
-//     isActive: {
-//       type: Boolean,
-//       default: true,
-//     },
-
-//     /* ================= RATINGS ================= */
-//     rating: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//       max: 5,
-//     },
-
-//     reviewsCount: {
-//       type: Number,
-//       default: 0,
-//     },
-
-//     /* ================= SEO ================= */
-//     seoTitle: String,
-//     seoDescription: String,
-
-//     /* ================= META ================= */
-//     createdBy: {
-//       type: String, // admin id later
-//     },
-//   },
-//   {
-//     timestamps: true,
-//   }
-// );
-
-// module.exports = mongoose.model("Product", productSchema);
