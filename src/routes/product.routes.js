@@ -13,7 +13,10 @@ const {
 } = require("../controllers/product.controller");
 
 const { adminAuth } = require("../middlewares/auth.middleware");
-
+const {
+   getAllProducts,
+ } = require("../controllers/product.controller");
+ 
 /* ======================================================
    PUBLIC ROUTES
    ====================================================== */
@@ -22,6 +25,8 @@ router.get("/search", searchProducts);
 router.get("/category/:category", getProductsByCategory);
 router.get("/slug/:slug", getProductBySlug);
 router.get("/id/:id", getProductById);
+router.get("/all", getAllProducts);
+
 
 /* ======================================================
    ADMIN ROUTES

@@ -362,19 +362,189 @@ exports.getProductById = async (req, res) => {
   
 
 /* ======================================================
-   SEARCH PRODUCTS
+   SEARCH PRODUCTS (PUBLIC)
    ====================================================== */
 exports.searchProducts = async (req, res) => {
   try {
-    const q = req.query.q || "";
+    const q = (req.query.q || "").trim();
+
+    // 🔒 Empty query guard
+    if (!q) {
+      return res.json([]);
+    }
 
     const products = await Product.find({
-      title: { $regex: q, $options: "i" },
-    }).sort({ createdAt: -1 });
+      isActive: true,
+      $or: [
+        { title: { $regex: q, $options: "i" } },
+        { brand: { $regex: q, $options: "i" } },
+        { category: { $regex: q, $options: "i" } },
+        { subCategory: { $regex: q, $options: "i" } },
+        { tags: { $regex: q, $options: "i" } },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(20); // 🚀 limit for performance + suggestions
 
     return res.json(products);
   } catch (error) {
     console.error("Search Products Error:", error);
     return res.status(500).json([]);
+  }
+};
+
+/* ======================================================
+   GET ALL PRODUCTS (WITH FILTERS)
+   ====================================================== */
+exports.getAllProducts = async (req, res) => {
+  try {
+    const {
+      sort,
+      brand,
+      size,
+      color,
+      rating,
+      minPrice,
+      maxPrice,
+    } = req.query;
+
+    /* ================= BASE FILTER ================= */
+    const filter = {
+      isActive: true,
+    };
+
+    if (brand) {
+      filter.brand = { $in: brand.split(",") };
+    }
+
+    if (size) {
+      filter["variants.size"] = {
+        $in: size.split(","),
+      };
+    }
+
+    if (color) {
+      filter["variants.color"] = {
+        $in: color.split(","),
+      };
+    }
+
+    if (rating) {
+      filter.rating = { $gte: Number(rating) };
+    }
+
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice)
+        filter.price.$gte = Number(minPrice);
+      if (maxPrice)
+        filter.price.$lte = Number(maxPrice);
+    }
+
+    /* ================= SORT ================= */
+    let sortQuery = { createdAt: -1 };
+
+    if (sort === "az") sortQuery = { title: 1 };
+    if (sort === "price-low")
+      sortQuery = { price: 1 };
+    if (sort === "price-high")
+      sortQuery = { price: -1 };
+    if (sort === "newest")
+      sortQuery = { createdAt: -1 };
+
+    /* ================= PRODUCTS ================= */
+    const products = await Product.find(filter).sort(
+      sortQuery
+    );
+
+    /* ================= FILTER DATA ================= */
+
+    const brands = await Product.aggregate([
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: "$brand",
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const subCategories = await Product.aggregate([
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: "$subCategory",
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const sizes = await Product.aggregate([
+      { $unwind: "$variants" },
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: "$variants.size",
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const colors = await Product.aggregate([
+      { $unwind: "$variants" },
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: "$variants.color",
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const ratings = [5, 4, 3, 2, 1];
+
+    const priceAgg = await Product.aggregate([
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$price" },
+          maxPrice: { $max: "$price" },
+        },
+      },
+    ]);
+
+    return res.json({
+      products,
+      filters: {
+        brands,
+        subCategories,
+        sizes,
+        colors,
+        ratings,
+        priceRange:
+          priceAgg[0] || {
+            minPrice: 0,
+            maxPrice: 0,
+          },
+      },
+    });
+  } catch (error) {
+    console.error("Get All Products Error:", error);
+    return res.status(500).json({
+      products: [],
+      filters: {
+        brands: [],
+        subCategories: [],
+        sizes: [],
+        colors: [],
+        ratings: [],
+        priceRange: { minPrice: 0, maxPrice: 0 },
+      },
+    });
   }
 };
