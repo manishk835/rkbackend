@@ -74,56 +74,29 @@ const OrderSchema = new mongoose.Schema(
       ],
       default: "Pending",
     },
+
+    
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: [
+            "Pending",
+            "Processing",
+            "Shipped",
+            "Delivered",
+            "Cancelled",
+          ],
+        },
+        updatedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model("Order", OrderSchema);
-
-
-// // src/models/Order.js
-// const mongoose = require("mongoose");
-
-// const OrderSchema = new mongoose.Schema(
-//   {
-//     customer: {
-//       name: String,
-//       phone: String,
-//       address: String,
-//       city: String,
-//       pincode: String,
-//     },
-//     items: [
-//       {
-//         productId: String,
-//         title: String,
-//         price: Number,
-//         quantity: Number,
-//       },
-//     ],
-//     totalAmount: Number,
-//     paymentMethod: {
-//       type: String,
-//       default: "COD",
-//     },
-//     status: {
-//       type: String,
-//       default: "Pending",
-//     },
-//     isPaid: {
-//       type: Boolean,
-//       default: false,
-//     },
-//     paymentMethod: String,
-//     razorpay: {
-//       orderId: String,
-//       paymentId: String,
-//       signature: String,
-//     },
-    
-//   },
-//   { timestamps: true }
-  
-// );
-
-// module.exports = mongoose.model("Order", OrderSchema);

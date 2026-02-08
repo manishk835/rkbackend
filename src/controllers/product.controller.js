@@ -548,3 +548,17 @@ exports.getAllProducts = async (req, res) => {
     });
   }
 };
+
+exports.getLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      totalStock: { $lte: 5 },
+      isActive: true,
+    }).select("title totalStock");
+
+    res.json(products);
+  } catch (err) {
+    console.error("Low stock error", err);
+    res.status(500).json([]);
+  }
+};
