@@ -4,68 +4,155 @@ const Product = require("../models/Product");
 /* ======================================================
    CREATE PRODUCT (ADMIN)
    ====================================================== */
-   exports.createProduct = async (req, res) => {
-    try {
-      const { variants, thumbnail } = req.body;
-  
-      /* ================= THUMBNAIL VALIDATION ================= */
-      if (!thumbnail) {
-        return res.status(400).json({
-          message: "Thumbnail image is required",
-        });
-      }
-  
-      /* ================= SKU VALIDATION ================= */
-      if (variants && variants.length > 0) {
-        const skus = variants.map((v) => v.sku);
-  
-        const duplicateSkus = skus.filter(
-          (sku, i) => skus.indexOf(sku) !== i
-        );
-  
-        if (duplicateSkus.length > 0) {
-          return res.status(400).json({
-            message: `Duplicate SKU found: ${[
-              ...new Set(duplicateSkus),
-            ].join(", ")}`,
-          });
-        }
-  
-        const existing = await Product.findOne({
-          "variants.sku": { $in: skus },
-        });
-  
-        if (existing) {
-          return res.status(400).json({
-            message:
-              "One or more SKUs already exist in another product",
-          });
-        }
-      }
-  
-      const product = await Product.create({
-        ...req.body,
-        category: req.body.category?.toLowerCase(),
-        subCategory: req.body.subCategory?.toLowerCase(),
-      });
-  
-      res.status(201).json(product);
-    } catch (err) {
-      console.error("CREATE PRODUCT ERROR:", err);
-  
-      // 🔥 better error message for validation
-      if (err.name === "ValidationError") {
-        return res.status(400).json({
-          message: err.message,
-        });
-      }
-  
-      res.status(500).json({
-        message: "Product create failed",
+ /* ======================================================
+   CREATE PRODUCT (ADMIN - PRODUCTION READY)
+====================================================== */
+exports.createProduct = async (req, res) => {
+  try {
+    const {
+      title,
+      price,
+      category,
+      subCategory,
+      brand,
+      description,
+      variants = [],
+      thumbnail,
+      images = [],
+      tags = [],
+      isActive = true,
+    } = req.body;
+
+    /* ================= BASIC VALIDATION ================= */
+
+    if (!title || !price || !category || !thumbnail) {
+      return res.status(400).json({
+        message: "Title, price, category and thumbnail are required",
       });
     }
-  };
-  
+
+    if (price <= 0) {
+      return res.status(400).json({
+        message: "Price must be greater than 0",
+      });
+    }
+
+    if (!Array.isArray(variants) || variants.length === 0) {
+      return res.status(400).json({
+        message: "At least one variant is required",
+      });
+    }
+
+    /* ================= SANITIZE INPUT ================= */
+
+    const cleanTitle = title.trim();
+    const cleanCategory = category.trim().toLowerCase();
+    const cleanSubCategory = subCategory?.trim().toLowerCase();
+    const cleanBrand = brand?.trim().toLowerCase();
+
+    /* ================= SLUG GENERATION ================= */
+
+    const slug = cleanTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const slugExists = await Product.findOne({ slug });
+
+    if (slugExists) {
+      return res.status(400).json({
+        message: "Product with similar title already exists",
+      });
+    }
+
+    /* ================= SKU VALIDATION ================= */
+
+    const skus = variants.map((v) => v.sku);
+
+    const duplicateSkus = skus.filter(
+      (sku, i) => skus.indexOf(sku) !== i
+    );
+
+    if (duplicateSkus.length > 0) {
+      return res.status(400).json({
+        message: `Duplicate SKU found: ${[
+          ...new Set(duplicateSkus),
+        ].join(", ")}`,
+      });
+    }
+
+    const existingSku = await Product.findOne({
+      "variants.sku": { $in: skus },
+    });
+
+    if (existingSku) {
+      return res.status(400).json({
+        message: "One or more SKUs already exist in another product",
+      });
+    }
+
+    /* ================= VARIANT VALIDATION ================= */
+
+    let totalStock = 0;
+
+    const cleanVariants = variants.map((variant) => {
+      if (!variant.size || !variant.color || !variant.sku) {
+        throw new Error("Variant size, color and sku are required");
+      }
+
+      if (variant.stock < 0) {
+        throw new Error("Stock cannot be negative");
+      }
+
+      totalStock += variant.stock || 0;
+
+      return {
+        size: variant.size,
+        color: variant.color,
+        sku: variant.sku,
+        stock: variant.stock || 0,
+      };
+    });
+
+    /* ================= CREATE PRODUCT ================= */
+
+    const product = await Product.create({
+      title: cleanTitle,
+      slug,
+      price,
+      category: cleanCategory,
+      subCategory: cleanSubCategory,
+      brand: cleanBrand,
+      description,
+      variants: cleanVariants,
+      totalStock,
+      thumbnail,
+      images,
+      tags,
+      isActive,
+    });
+
+    /* ================= SAFE RESPONSE ================= */
+
+    return res.status(201).json({
+      message: "Product created successfully",
+      product,
+    });
+
+  } catch (err) {
+    console.error("CREATE PRODUCT ERROR:", err);
+
+    if (err.message) {
+      return res.status(400).json({
+        message: err.message,
+      });
+    }
+
+    return res.status(500).json({
+      message: "Product creation failed",
+    });
+  }
+};
 
   /* ======================================================
    UPDATE PRODUCT (ADMIN)
@@ -127,15 +214,43 @@ const Product = require("../models/Product");
 /* ======================================================
    GET ALL PRODUCTS (PUBLIC)
    ====================================================== */
-exports.getProducts = async (req, res) => {
-  try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    return res.json(products);
-  } catch (error) {
-    console.error("Get Products Error:", error);
-    return res.status(500).json([]);
-  }
-};
+   exports.getProducts = async (req, res) => {
+    try {
+      const { page = 1, limit = 12, sort } = req.query;
+  
+      const skip = (Number(page) - 1) * Number(limit);
+  
+      let sortQuery = { createdAt: -1 };
+      if (sort === "price-low") sortQuery = { price: 1 };
+      if (sort === "price-high") sortQuery = { price: -1 };
+      if (sort === "az") sortQuery = { title: 1 };
+  
+      const [products, total] = await Promise.all([
+        Product.find({ isActive: true })
+          .select("-variants.sku") // hide internal SKU
+          .sort(sortQuery)
+          .skip(skip)
+          .limit(Number(limit))
+          .lean(),
+        Product.countDocuments({ isActive: true }),
+      ]);
+  
+      return res.json({
+        products,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+  
+    } catch (error) {
+      console.error("Get Products Error:", error);
+      return res.status(500).json({ products: [] });
+    }
+  };
+  
 
 /* ======================================================
    GET PRODUCT BY SLUG
@@ -364,34 +479,28 @@ exports.getProductById = async (req, res) => {
 /* ======================================================
    SEARCH PRODUCTS (PUBLIC)
    ====================================================== */
-exports.searchProducts = async (req, res) => {
-  try {
-    const q = (req.query.q || "").trim();
-
-    // 🔒 Empty query guard
-    if (!q) {
-      return res.json([]);
+   exports.searchProducts = async (req, res) => {
+    try {
+      const q = (req.query.q || "").trim();
+  
+      if (!q) return res.json([]);
+  
+      const products = await Product.find({
+        isActive: true,
+        $text: { $search: q },
+      })
+        .select("title slug price thumbnail rating")
+        .limit(20)
+        .lean();
+  
+      return res.json(products);
+  
+    } catch (error) {
+      console.error("Search Products Error:", error);
+      return res.status(500).json([]);
     }
-
-    const products = await Product.find({
-      isActive: true,
-      $or: [
-        { title: { $regex: q, $options: "i" } },
-        { brand: { $regex: q, $options: "i" } },
-        { category: { $regex: q, $options: "i" } },
-        { subCategory: { $regex: q, $options: "i" } },
-        { tags: { $regex: q, $options: "i" } },
-      ],
-    })
-      .sort({ createdAt: -1 })
-      .limit(20); // 🚀 limit for performance + suggestions
-
-    return res.json(products);
-  } catch (error) {
-    console.error("Search Products Error:", error);
-    return res.status(500).json([]);
-  }
-};
+  };
+  
 
 /* ======================================================
    GET ALL PRODUCTS (WITH FILTERS)

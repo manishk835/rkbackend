@@ -7,23 +7,28 @@ const variantSchema = new mongoose.Schema(
     size: {
       type: String,
       required: true,
+      trim: true,
     },
     color: {
       type: String,
       required: true,
+      trim: true,
     },
     stock: {
       type: Number,
       default: 0,
+      min: 0,
     },
-
     sku: {
       type: String,
       required: true,
       uppercase: true,
+      trim: true,
     },
-    
-    priceOverride: Number,
+    priceOverride: {
+      type: Number,
+      min: 0,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -35,9 +40,9 @@ const variantSchema = new mongoose.Schema(
 /* ================= IMAGE SCHEMA ================= */
 const imageSchema = new mongoose.Schema(
   {
-    url: { type: String, required: true },
-    alt: String,
-    order: Number,
+    url: { type: String, required: true, trim: true },
+    alt: { type: String, trim: true },
+    order: { type: Number, default: 0 },
   },
   { _id: false }
 );
@@ -45,11 +50,12 @@ const imageSchema = new mongoose.Schema(
 /* ================= PRODUCT SCHEMA ================= */
 const productSchema = new mongoose.Schema(
   {
-    /* ================= BASIC INFO ================= */
+    /* ================= BASIC ================= */
     title: {
       type: String,
       required: true,
       trim: true,
+      maxlength: 200,
     },
 
     slug: {
@@ -60,7 +66,12 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
-    brand: String,
+    brand: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
 
     shortDescription: {
       type: String,
@@ -86,15 +97,23 @@ const productSchema = new mongoose.Schema(
       index: true,
     },
 
-    tags: [String],
+    tags: {
+      type: [String],
+      index: true,
+    },
 
     /* ================= PRICING ================= */
     price: {
       type: Number,
       required: true,
+      min: 0,
+      index: true,
     },
 
-    originalPrice: Number,
+    originalPrice: {
+      type: Number,
+      min: 0,
+    },
 
     discountPercent: {
       type: Number,
@@ -122,50 +141,35 @@ const productSchema = new mongoose.Schema(
     images: [imageSchema],
 
     /* ================= VARIANTS ================= */
-    variants: [variantSchema],
+    variants: {
+      type: [variantSchema],
+      validate: {
+        validator: function (v) {
+          return v && v.length > 0;
+        },
+        message: "At least one variant required",
+      },
+    },
 
     /* ================= STOCK ================= */
     totalStock: {
       type: Number,
       default: 0,
+      min: 0,
+      index: true,
     },
 
     inStock: {
       type: Boolean,
       default: true,
+      index: true,
     },
 
     maxOrderQty: {
       type: Number,
       default: 5,
+      min: 1,
     },
-
-    /* ================= PRODUCT DETAILS ================= */
-    material: String,
-    fit: String,
-    pattern: String,
-    sleeve: String,
-    occasion: String,
-    careInstructions: String,
-    countryOfOrigin: String,
-
-    /* ================= DELIVERY & POLICY ================= */
-    codAvailable: {
-      type: Boolean,
-      default: true,
-    },
-
-    returnDays: {
-      type: Number,
-      default: 7,
-    },
-
-    replacementDays: {
-      type: Number,
-      default: 7,
-    },
-
-    deliveryEstimate: String,
 
     /* ================= RATINGS ================= */
     rating: {
@@ -173,6 +177,7 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
       max: 5,
+      index: true,
     },
 
     reviewsCount: {
@@ -184,21 +189,25 @@ const productSchema = new mongoose.Schema(
     isFeatured: {
       type: Boolean,
       default: false,
+      index: true,
     },
 
     isNewArrival: {
       type: Boolean,
       default: false,
+      index: true,
     },
 
     isBestSeller: {
       type: Boolean,
       default: false,
+      index: true,
     },
 
     isActive: {
       type: Boolean,
       default: true,
+      index: true,
     },
 
     /* ================= SEO ================= */
@@ -209,19 +218,22 @@ const productSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      index: true,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-/* ================= INDEXES ================= */
-productSchema.index({ title: "text", tags: "text" });
+/* ================= TEXT SEARCH INDEX ================= */
+productSchema.index({
+  title: "text",
+  brand: "text",
+  category: "text",
+  subCategory: "text",
+  tags: "text",
+});
 
-/* ================= MIDDLEWARE ================= */
-
-// 🔹 Auto slug generate (if not provided)
+/* ================= AUTO SLUG ================= */
 productSchema.pre("validate", function () {
   if (!this.slug && this.title) {
     this.slug = this.title
@@ -232,7 +244,7 @@ productSchema.pre("validate", function () {
   }
 });
 
-// 🔹 Auto calculate stock (CREATE + SAVE)
+/* ================= AUTO STOCK CALC ================= */
 productSchema.pre("save", function () {
   if (Array.isArray(this.variants)) {
     this.totalStock = this.variants.reduce(
@@ -243,11 +255,11 @@ productSchema.pre("save", function () {
   }
 });
 
-// 🔹 Auto calculate stock (UPDATE)
+/* ================= AUTO STOCK ON UPDATE ================= */
 productSchema.pre("findOneAndUpdate", function () {
   const update = this.getUpdate();
 
-  if (update?.variants && Array.isArray(update.variants)) {
+  if (update?.variants) {
     const totalStock = update.variants.reduce(
       (sum, v) => sum + (Number(v.stock) || 0),
       0
@@ -255,22 +267,15 @@ productSchema.pre("findOneAndUpdate", function () {
 
     update.totalStock = totalStock;
     update.inStock = totalStock > 0;
+
     this.setUpdate(update);
   }
 });
 
-// 🔹 Auto-generate SKU if missing
-productSchema.pre("validate", function () {
-  if (this.variants && this.variants.length > 0) {
-    this.variants.forEach((v, i) => {
-      if (!v.sku && this.slug) {
-        v.sku = `${this.slug.toUpperCase()}-${
-          v.size || "NA"
-        }-${v.color || "NA"}-${i + 1}`;
-      }
-    });
-  }
-});
-
+/* ================= GLOBAL SKU UNIQUE INDEX ================= */
+// productSchema.index(
+//   { "variants.sku": 1 },
+//   { unique: true, sparse: true }
+// );
 
 module.exports = mongoose.model("Product", productSchema);

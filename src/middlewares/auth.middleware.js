@@ -1,24 +1,99 @@
-// src/middlewares/auth.middleware.js
+// auth.middleware.js
+
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-exports.adminAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
+/* ======================================================
+   PROTECT (USER AUTH)
+====================================================== */
+exports.protect = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = req.cookies?.token;
 
-    if (decoded.role !== "admin") {
-      return res.status(403).json({ message: "Forbidden" });
+    if (!token) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
     }
 
+    let decoded;
+
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({
+          message: "Session expired",
+        });
+      }
+
+      return res.status(401).json({
+        message: "Invalid token",
+      });
+    }
+
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User no longer exists",
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({
+        message: "Account blocked",
+      });
+    }
+
+    req.user = user;
     next();
-  } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+  } catch (error) {
+    console.error("Protect middleware error:", error);
+    return res.status(500).json({
+      message: "Authentication failed",
+    });
   }
 };
+
+
+/* ======================================================
+   ADMIN AUTH (COOKIE BASED)
+====================================================== */
+exports.adminAuth = async (req, res, next) => {
+  try {
+    const token = req.cookies?.token;
+
+    if (!token) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
+
+    let decoded;
+
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        message: "Invalid or expired token",
+      });
+    }
+
+    if (decoded.role !== "admin") {
+      return res.status(403).json({
+        message: "Admin access required",
+      });
+    }
+
+    req.admin = decoded; // optional but useful
+    next();
+
+  } catch (error) {
+    console.error("Admin auth error:", error);
+    return res.status(500).json({
+      message: "Authorization failed",
+    });
+  }
+};
+

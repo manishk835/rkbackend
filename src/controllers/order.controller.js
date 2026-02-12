@@ -1,21 +1,66 @@
+//src/controllers/order/controller.js
 const Order = require("../models/Order");
 const mongoose = require("mongoose");
 
 /* ======================================================
-   CREATE ORDER (USER)
-   ====================================================== */
+   CREATE ORDER (USER - PROTECTED)
+====================================================== */
 exports.createOrder = async (req, res) => {
   try {
+    const userId = req.user._id;
+
+    const {
+      customer,
+      items,
+      subtotal,
+      discount = 0,
+      totalAmount,
+      paymentMethod,
+      paymentStatus = "PENDING",
+    } = req.body;
+
+    /* ===== BASIC VALIDATION ===== */
+    if (!customer?.name || !customer?.phone || !customer?.address) {
+      return res.status(400).json({
+        message: "Customer details incomplete",
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Order must contain at least one item",
+      });
+    }
+
+    /* ===== PRICE SAFETY CHECK ===== */
+    const calculatedTotal = items.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    if (calculatedTotal !== subtotal) {
+      return res.status(400).json({
+        message: "Price mismatch detected",
+      });
+    }
+
     const order = await Order.create({
-      ...req.body,
+      user: userId,
+      customer,
+      items,
+      subtotal,
+      discount,
+      totalAmount,
+      paymentMethod,
+      paymentStatus,
+      status: "Pending",
       statusHistory: [
         {
-          status: req.body.status || "Pending",
+          status: "Pending",
           updatedAt: new Date(),
         },
       ],
     });
-    
 
     return res.status(201).json(order);
   } catch (error) {
@@ -26,10 +71,28 @@ exports.createOrder = async (req, res) => {
   }
 };
 
+
+/* ======================================================
+   USER – GET MY ORDERS (COOKIE BASED)
+====================================================== */
+exports.getUserOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      user: req.user._id,
+    }).sort({ createdAt: -1 });
+
+    return res.json(orders);
+  } catch (error) {
+    console.error("User Orders Error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch orders",
+    });
+  }
+};
+
 /* ======================================================
    ADMIN – GET ALL ORDERS
-   (FILTER + SEARCH + PAGINATION)
-   ====================================================== */
+====================================================== */
 exports.getAllOrders = async (req, res) => {
   try {
     const {
@@ -41,12 +104,10 @@ exports.getAllOrders = async (req, res) => {
 
     const filter = {};
 
-    /* ===== STATUS FILTER ===== */
     if (status) {
       filter.status = status;
     }
 
-    /* ===== SEARCH (ORDER ID / PHONE) ===== */
     if (search) {
       const conditions = [];
 
@@ -68,10 +129,11 @@ exports.getAllOrders = async (req, res) => {
 
     const [orders, total] = await Promise.all([
       Order.find(filter)
+      .populate("user", "name phone role")
+
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit))
-        .lean(),
+        .limit(Number(limit)),
       Order.countDocuments(filter),
     ]);
 
@@ -85,56 +147,24 @@ exports.getAllOrders = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get all orders error:", error);
+    console.error("Admin Get Orders Error:", error);
     return res.status(500).json({
-      orders: [],
-      pagination: {
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0,
-      },
-    });
-  }
-};
-
-/* ======================================================
-   USER – GET ORDERS BY PHONE
-   ====================================================== */
-exports.getUserOrders = async (req, res) => {
-  try {
-    const phone = req.params.phone || req.query.phone;
-
-    if (!phone) {
-      return res.json([]);
-    }
-
-    const orders = await Order.find({
-      "customer.phone": phone,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.json(orders);
-  } catch (error) {
-    console.error("Get user orders error:", error);
-    return res.status(500).json({
-      message: "User orders fetch failed",
+      message: "Failed to fetch orders",
     });
   }
 };
 
 /* ======================================================
    ADMIN – UPDATE ORDER STATUS
-   ====================================================== */
+====================================================== */
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
     if (!status) {
-      return res
-        .status(400)
-        .json({ message: "Status is required" });
+      return res.status(400).json({
+        message: "Status is required",
+      });
     }
 
     const order = await Order.findByIdAndUpdate(
@@ -152,14 +182,14 @@ exports.updateOrderStatus = async (req, res) => {
     );
 
     if (!order) {
-      return res
-        .status(404)
-        .json({ message: "Order not found" });
+      return res.status(404).json({
+        message: "Order not found",
+      });
     }
 
     return res.json(order);
   } catch (error) {
-    console.error("Update order status error:", error);
+    console.error("Update Order Error:", error);
     return res.status(500).json({
       message: "Status update failed",
     });
@@ -168,28 +198,28 @@ exports.updateOrderStatus = async (req, res) => {
 
 /* ======================================================
    ADMIN – GET SINGLE ORDER
-   ====================================================== */
+====================================================== */
 exports.getOrderByIdAdmin = async (req, res) => {
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res
-        .status(400)
-        .json({ message: "Invalid order id" });
+      return res.status(400).json({
+        message: "Invalid order id",
+      });
     }
 
-    const order = await Order.findById(id).lean();
+    const order = await Order.findById(id);
 
     if (!order) {
-      return res
-        .status(404)
-        .json({ message: "Order not found" });
+      return res.status(404).json({
+        message: "Order not found",
+      });
     }
 
     return res.json(order);
   } catch (error) {
-    console.error("Admin get order error:", error);
+    console.error("Get Order Admin Error:", error);
     return res.status(500).json({
       message: "Failed to fetch order",
     });
@@ -197,25 +227,26 @@ exports.getOrderByIdAdmin = async (req, res) => {
 };
 
 /* ======================================================
-   ADMIN – EXPORT ORDERS CSV
-   ====================================================== */
-   exports.exportOrdersCSV = async (req, res) => {
-    try {
-      const orders = await Order.find().sort({ createdAt: -1 });
-  
-      let csv =
-        "OrderID,Name,Phone,Total,Status,Date\n";
-  
-      orders.forEach((o) => {
-        csv += `${o._id},${o.customer.name},${o.customer.phone},${o.totalAmount},${o.status},${o.createdAt}\n`;
-      });
-  
-      res.header("Content-Type", "text/csv");
-      res.attachment("orders.csv");
-      return res.send(csv);
-    } catch (err) {
-      console.error("CSV export error", err);
-      res.status(500).send("Export failed");
-    }
-  };
-  
+   ADMIN – EXPORT CSV
+====================================================== */
+exports.exportOrdersCSV = async (req, res) => {
+  try {
+    const orders = await Order.find().sort({
+      createdAt: -1,
+    });
+
+    let csv =
+      "OrderID,Name,Phone,Total,Status,Date\n";
+
+    orders.forEach((o) => {
+      csv += `"${o._id}","${o.customer.name}","${o.customer.phone}","${o.totalAmount}","${o.status}","${o.createdAt}"\n`;
+    });
+
+    res.header("Content-Type", "text/csv");
+    res.attachment("orders.csv");
+    return res.send(csv);
+  } catch (err) {
+    console.error("CSV Export Error:", err);
+    return res.status(500).send("Export failed");
+  }
+};

@@ -1,3 +1,4 @@
+// src/routes/order.routes.js
 const express = require("express");
 const router = express.Router();
 
@@ -16,12 +17,14 @@ const { adminAuth } = require("../middlewares/auth.middleware");
    USER ROUTES
    ====================================================== */
 
-// Create order
-router.post("/", createOrder);
+   const { protect } = require("../middlewares/auth.middleware");
 
-// Get user orders (by phone)
-router.get("/my", getUserOrders);        // /my?phone=XXXXXXXXXX
-router.get("/my/:phone", getUserOrders); // /my/XXXXXXXXXX
+   // Create order (USER)
+   router.post("/", protect, createOrder);
+   
+   // Get logged in user orders
+   router.get("/my", protect, getUserOrders);
+   
 
 
 /* ======================================================
