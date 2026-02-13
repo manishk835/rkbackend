@@ -1,7 +1,12 @@
-// auth.middleware.js
-
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+
+/* ======================================================
+   VERIFY TOKEN HELPER
+====================================================== */
+const verifyToken = (token) => {
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
 
 /* ======================================================
    PROTECT (USER AUTH)
@@ -19,7 +24,7 @@ exports.protect = async (req, res, next) => {
     let decoded;
 
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = verifyToken(token);
     } catch (err) {
       if (err.name === "TokenExpiredError") {
         return res.status(401).json({
@@ -46,8 +51,16 @@ exports.protect = async (req, res, next) => {
       });
     }
 
+    // 🔐 Token version check (for forced logout support)
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({
+        message: "Session invalidated",
+      });
+    }
+
     req.user = user;
     next();
+
   } catch (error) {
     console.error("Protect middleware error:", error);
     return res.status(500).json({
@@ -56,9 +69,8 @@ exports.protect = async (req, res, next) => {
   }
 };
 
-
 /* ======================================================
-   ADMIN AUTH (COOKIE BASED)
+   ADMIN AUTH
 ====================================================== */
 exports.adminAuth = async (req, res, next) => {
   try {
@@ -73,20 +85,28 @@ exports.adminAuth = async (req, res, next) => {
     let decoded;
 
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = verifyToken(token);
     } catch (err) {
       return res.status(401).json({
         message: "Invalid or expired token",
       });
     }
 
-    if (decoded.role !== "admin") {
+    const admin = await User.findById(decoded.id);
+
+    if (!admin || admin.role !== "admin") {
       return res.status(403).json({
         message: "Admin access required",
       });
     }
 
-    req.admin = decoded; // optional but useful
+    if (admin.tokenVersion !== decoded.tokenVersion) {
+      return res.status(401).json({
+        message: "Session invalidated",
+      });
+    }
+
+    req.admin = admin;
     next();
 
   } catch (error) {
@@ -96,4 +116,3 @@ exports.adminAuth = async (req, res, next) => {
     });
   }
 };
-

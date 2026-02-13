@@ -4,11 +4,13 @@ const bcrypt = require("bcryptjs");
 const userSchema = new mongoose.Schema(
   {
     /* ================= BASIC INFO ================= */
+
     name: {
       type: String,
       required: true,
       trim: true,
       minlength: 2,
+      maxlength: 100,
     },
 
     phone: {
@@ -21,7 +23,9 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      select: false, // 🔥 never return password
+      required: true,
+      minlength: 8,
+      select: false,
     },
 
     role: {
@@ -31,25 +35,19 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    /* ================= OTP ================= */
-    otp: {
-      type: String,
-      select: false,
-    },
-
-    otpExpiry: {
-      type: Date,
-    },
-
-    otpAttempts: {
-      type: Number,
-      default: 0,
-    },
-
+    wishlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    
     /* ================= ACCOUNT SECURITY ================= */
+
     isBlocked: {
       type: Boolean,
       default: false,
+      index: true,
     },
 
     failedLoginAttempts: {
@@ -57,18 +55,14 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
 
-    lockUntil: {
-      type: Date,
-    },
+    lockUntil: Date,
 
     tokenVersion: {
       type: Number,
       default: 0,
     },
 
-    lastLogin: {
-      type: Date,
-    },
+    lastLogin: Date,
   },
   { timestamps: true }
 );
@@ -76,17 +70,18 @@ const userSchema = new mongoose.Schema(
 /* ======================================================
    PASSWORD HASH MIDDLEWARE
 ====================================================== */
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password") || !this.password)
-    return next();
 
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+
+  this.password = await bcrypt.hash(this.password, 12);
 });
+
 
 /* ======================================================
    PASSWORD COMPARE METHOD
 ====================================================== */
+
 userSchema.methods.comparePassword = async function (
   candidatePassword
 ) {
@@ -94,12 +89,28 @@ userSchema.methods.comparePassword = async function (
 };
 
 /* ======================================================
-   AUTO UNLOCK IF LOCK EXPIRED
+   CHECK IF ACCOUNT IS LOCKED
 ====================================================== */
+
 userSchema.methods.isLocked = function () {
-  return (
-    this.lockUntil && this.lockUntil > Date.now()
-  );
+  if (!this.lockUntil) return false;
+  return this.lockUntil > Date.now();
+};
+
+/* ======================================================
+   STATIC: FIND ADMINS
+====================================================== */
+
+userSchema.statics.findAdmins = function () {
+  return this.find({ role: "admin" });
+};
+
+/* ======================================================
+   STATIC: FIND USERS
+====================================================== */
+
+userSchema.statics.findUsers = function () {
+  return this.find({ role: "user" });
 };
 
 module.exports = mongoose.model("User", userSchema);

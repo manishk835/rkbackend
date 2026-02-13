@@ -1,9 +1,9 @@
+// index.js
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-// const mongoSanitize = require("express-mongo-sanitize");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
 
@@ -13,7 +13,7 @@ connectDB();
 const app = express();
 
 /* ======================================================
-   BODY PARSERS (FIRST)
+   BODY PARSERS
 ====================================================== */
 
 app.use(express.json({ limit: "10kb" }));
@@ -21,21 +21,23 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 /* ======================================================
-   CORS (VERY IMPORTANT FIX)
+   CORS CONFIG
 ====================================================== */
 
 const allowedOrigins = [
   "http://localhost:3000",
   process.env.FRONTEND_URL,
-];
+].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
+
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+
       return callback(new Error("CORS not allowed"), false);
     },
     credentials: true,
@@ -43,33 +45,25 @@ app.use(
 );
 
 /* ======================================================
-   SECURITY MIDDLEWARES (AFTER BODY PARSER)
+   SECURITY
 ====================================================== */
-
-// app.use(
-//   mongoSanitize({
-//     replaceWith: "_",
-//   })
-// );
-app.use((req, res, next) => {
-  req.body = sanitizeObject(req.body);
-  next();
-});
-
-function sanitizeObject(obj) {
-  if (!obj) return obj;
-  Object.keys(obj).forEach((key) => {
-    if (key.includes("$") || key.includes(".")) {
-      delete obj[key];
-    }
-  });
-  return obj;
-}
 
 app.use(helmet());
 
+// Basic body sanitization
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === "object") {
+    Object.keys(req.body).forEach((key) => {
+      if (key.includes("$") || key.includes(".")) {
+        delete req.body[key];
+      }
+    });
+  }
+  next();
+});
+
 /* ======================================================
-   RATE LIMITERS
+   RATE LIMITING
 ====================================================== */
 
 const limiter = rateLimit({
@@ -97,6 +91,7 @@ app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/admin", require("./routes/admin.routes"));
 app.use("/api/products", require("./routes/product.routes"));
 app.use("/api/orders", require("./routes/order.routes"));
+app.use("/api/wishlist", require("./routes/wishlist.routes"));
 app.use("/api/payment", require("./routes/payment.routes"));
 app.use("/api/upload", require("./routes/upload.routes"));
 app.use("/api/address", require("./routes/address"));
@@ -105,6 +100,7 @@ app.use("/api/categories", require("./routes/category.routes"));
 /* ======================================================
    404 HANDLER
 ====================================================== */
+
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
@@ -112,6 +108,7 @@ app.use((req, res) => {
 /* ======================================================
    GLOBAL ERROR HANDLER
 ====================================================== */
+
 app.use((err, req, res, next) => {
   console.error("Server Error:", err);
 

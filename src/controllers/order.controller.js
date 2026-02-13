@@ -12,9 +12,7 @@ exports.createOrder = async (req, res) => {
     const {
       customer,
       items,
-      subtotal,
       discount = 0,
-      totalAmount,
       paymentMethod,
       paymentStatus = "PENDING",
     } = req.body;
@@ -32,17 +30,13 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    /* ===== PRICE SAFETY CHECK ===== */
-    const calculatedTotal = items.reduce(
+    /* ===== SERVER SIDE PRICE CALCULATION ===== */
+    const subtotal = items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
 
-    if (calculatedTotal !== subtotal) {
-      return res.status(400).json({
-        message: "Price mismatch detected",
-      });
-    }
+    const totalAmount = subtotal - discount;
 
     const order = await Order.create({
       user: userId,
@@ -63,6 +57,7 @@ exports.createOrder = async (req, res) => {
     });
 
     return res.status(201).json(order);
+
   } catch (error) {
     console.error("Create Order Error:", error);
     return res.status(500).json({
@@ -70,6 +65,7 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
+
 
 
 /* ======================================================
