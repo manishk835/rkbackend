@@ -1,5 +1,18 @@
+// models/User.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+
+/* ======================================================
+   CONSTANTS
+====================================================== */
+
+const SALT_ROUNDS = 12;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_TIME = 15 * 60 * 1000;
+
+/* ======================================================
+   SCHEMA
+====================================================== */
 
 const userSchema = new mongoose.Schema(
   {
@@ -18,7 +31,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: true,
       match: /^[6-9]\d{9}$/,
-      index: true,
     },
 
     password: {
@@ -32,8 +44,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["user", "admin"],
       default: "user",
-      index: true,
     },
+
+    /* ================= WISHLIST ================= */
 
     wishlist: [
       {
@@ -41,13 +54,12 @@ const userSchema = new mongoose.Schema(
         ref: "Product",
       },
     ],
-    
+
     /* ================= ACCOUNT SECURITY ================= */
 
     isBlocked: {
       type: Boolean,
       default: false,
-      index: true,
     },
 
     failedLoginAttempts: {
@@ -63,54 +75,66 @@ const userSchema = new mongoose.Schema(
     },
 
     lastLogin: Date,
+
+    /* ================= LOYALTY ================= */
+
+    loyaltyPoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
 
 /* ======================================================
-   PASSWORD HASH MIDDLEWARE
+   INDEXES (ONLY HERE — NO DUPLICATE)
 ====================================================== */
 
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+userSchema.index({ role: 1 });
+userSchema.index({ isBlocked: 1 });
+userSchema.index({ createdAt: -1 });
 
-  this.password = await bcrypt.hash(this.password, 12);
+/* ======================================================
+   PASSWORD HASH
+====================================================== */
+
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
+  next();
 });
 
-
 /* ======================================================
-   PASSWORD COMPARE METHOD
+   METHODS
 ====================================================== */
 
-userSchema.methods.comparePassword = async function (
-  candidatePassword
-) {
-  return bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = function (candidate) {
+  return bcrypt.compare(candidate, this.password);
 };
-
-/* ======================================================
-   CHECK IF ACCOUNT IS LOCKED
-====================================================== */
 
 userSchema.methods.isLocked = function () {
-  if (!this.lockUntil) return false;
-  return this.lockUntil > Date.now();
+  return this.lockUntil && this.lockUntil > Date.now();
+};
+
+userSchema.methods.handleFailedLogin = async function () {
+  this.failedLoginAttempts += 1;
+
+  if (this.failedLoginAttempts >= MAX_LOGIN_ATTEMPTS) {
+    this.lockUntil = Date.now() + LOCK_TIME;
+  }
+
+  await this.save();
+};
+
+userSchema.methods.resetLoginAttempts = async function () {
+  this.failedLoginAttempts = 0;
+  this.lockUntil = undefined;
+  await this.save();
 };
 
 /* ======================================================
-   STATIC: FIND ADMINS
+   EXPORT
 ====================================================== */
-
-userSchema.statics.findAdmins = function () {
-  return this.find({ role: "admin" });
-};
-
-/* ======================================================
-   STATIC: FIND USERS
-====================================================== */
-
-userSchema.statics.findUsers = function () {
-  return this.find({ role: "user" });
-};
 
 module.exports = mongoose.model("User", userSchema);

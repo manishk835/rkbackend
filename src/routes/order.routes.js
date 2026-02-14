@@ -1,70 +1,36 @@
 // src/routes/order.routes.js
 const express = require("express");
 const router = express.Router();
-
 const {
   createOrder,
   getAllOrders,
   getUserOrders,
   updateOrderStatus,
   getOrderByIdAdmin,
-  exportOrdersCSV, // ✅ CSV EXPORT
+  exportOrdersCSV,
+  cancelOrder,
+  requestReturn,
+  downloadInvoice
 } = require("../controllers/order.controller");
 
-const { adminAuth } = require("../middlewares/auth.middleware");
-
-/* ======================================================
-   USER ROUTES
-   ====================================================== */
-
-   const { protect } = require("../middlewares/auth.middleware");
-
-   // Create order (USER)
-   router.post("/", protect, createOrder);
-   
-   // Get logged in user orders
-   router.get("/my", protect, getUserOrders);
-   
+const { protect, adminAuth } = require("../middlewares/auth.middleware");
 
 
-/* ======================================================
-   ADMIN ROUTES
-   ====================================================== */
-// ⚠️ IMPORTANT: admin specific routes FIRST
+/* ================= USER ROUTES ================= */
 
-// Export orders CSV (ADMIN)
-router.get(
-  "/export/csv",
-  adminAuth,
-  exportOrdersCSV
-);
+router.post("/", protect, createOrder);
+router.get("/my", protect, getUserOrders);
+router.put("/:id/cancel", protect, cancelOrder);
+router.put("/:id/return", protect, requestReturn);
+router.get("/:id/invoice", protect, downloadInvoice);
 
-// Get single order (ADMIN)
-router.get(
-  "/admin/:id",
-  adminAuth,
-  getOrderByIdAdmin
-);
 
-// Get all orders (ADMIN) + pagination + filter + search
-router.get(
-  "/",
-  adminAuth,
-  getAllOrders
-);
+/* ================= ADMIN ROUTES ================= */
 
-// Update order status (ADMIN)
-router.put(
-  "/:id/status",
-  adminAuth,
-  updateOrderStatus
-);
-
-// (optional backward compatibility)
-router.put(
-  "/:id",
-  adminAuth,
-  updateOrderStatus
-);
+router.get("/export/csv", adminAuth, exportOrdersCSV);
+router.get("/admin/:id", adminAuth, getOrderByIdAdmin);
+router.get("/", adminAuth, getAllOrders);
+router.put("/:id/status", adminAuth, updateOrderStatus);
+router.put("/:id", adminAuth, updateOrderStatus);
 
 module.exports = router;
