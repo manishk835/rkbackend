@@ -94,7 +94,21 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-    
+    /* ================= PASSWORD RESET ================= */
+
+    resetOtpCode: String,
+    resetOtpExpires: Date,
+    resetOtpAttempts: {
+      type: Number,
+      default: 0,
+    },
+    /* ================= RESET PASSWORD ================= */
+
+  resetPasswordAllowed: {
+    type: Boolean,
+    default: false,
+  },
+
   },
   { timestamps: true }
 );
@@ -129,10 +143,7 @@ userSchema.methods.generateOTP = function () {
   return otp;
 };
 
-
-
 module.exports = mongoose.model("User", userSchema);
-
 
 // // models/User.js
 // const mongoose = require("mongoose");
@@ -257,6 +268,5 @@ module.exports = mongoose.model("User", userSchema);
 
 //   return otp;
 // };
-
 
 // module.exports = mongoose.model("User", userSchema);

@@ -101,7 +101,6 @@ exports.register = async (req, res) => {
       message: "OTP sent to your email",
       phone,
     });
-
   } catch (err) {
     console.error("Register Error:", err);
     return res.status(500).json({ message: "Registration failed" });
@@ -159,7 +158,6 @@ exports.verifyOTP = async (req, res) => {
     return res.json({
       message: "Phone verified successfully",
     });
-
   } catch (err) {
     console.error("Verify OTP Error:", err);
     return res.status(500).json({
@@ -211,7 +209,6 @@ exports.resendOtp = async (req, res) => {
     return res.json({
       message: "OTP resent to your email",
     });
-
   } catch (error) {
     console.error("Resend OTP Error:", error);
     return res.status(500).json({
@@ -292,7 +289,6 @@ exports.login = async (req, res) => {
     });
 
     res.json({ message: "Login successful" });
-
   } catch (err) {
     console.error("Login Error:", err);
     res.status(500).json({ message: "Login failed" });
@@ -348,10 +344,7 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(
-      currentPassword,
-      user.password
-    );
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
       return res.status(400).json({
@@ -364,7 +357,6 @@ exports.changePassword = async (req, res) => {
     await user.save();
 
     res.json({ message: "Password updated successfully" });
-
   } catch (err) {
     console.error("Change Password Error:", err);
     res.status(500).json({
@@ -375,6 +367,10 @@ exports.changePassword = async (req, res) => {
 
 /* ======================================================
    FORGOT PASSWORD (SEND RESET OTP)
+====================================================== */
+
+/* ======================================================
+   FORGOT PASSWORD (SEND RESET OTP - SECURE)
 ====================================================== */
 
 exports.forgotPassword = async (req, res) => {
@@ -395,24 +391,35 @@ exports.forgotPassword = async (req, res) => {
 
     const user = await User.findOne({ phone });
 
-    // 🔐 Important: Do NOT reveal if user exists
+    // 🔐 Do NOT reveal if user exists
     if (!user) {
       return res.json({
         message: "If this number exists, OTP has been sent",
       });
     }
 
-    // Generate OTP
-    const otp = user.generateOTP();
+    // 🚫 Prevent spam (if OTP still valid)
+    if (user.resetOtpExpires && user.resetOtpExpires > Date.now()) {
+      return res.status(400).json({
+        message: "OTP already sent. Please wait before requesting again.",
+      });
+    }
+
+    // 🔐 Generate new reset OTP
+    const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetOtpCode = resetOtp;
+    user.resetOtpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.resetOtpAttempts = 0;
+
     await user.save();
 
-    // Send email OTP (since we are using Gmail)
-    await sendOtpEmail(user.email, otp);
+    // 📧 Send email OTP
+    await sendOtpEmail(user.email, resetOtp);
 
     return res.json({
       message: "If this number exists, OTP has been sent",
     });
-
   } catch (error) {
     console.error("Forgot Password Error:", error);
     return res.status(500).json({
@@ -421,173 +428,133 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// // controllers/auth.controllers.js
+/* ======================================================
+   VERIFY RESET OTP
+====================================================== */
 
-// const jwt = require("jsonwebtoken");
-// const User = require("../models/User");
-// const bcrypt = require("bcryptjs")
-// /* ======================================================
-//    HELPER: GENERATE TOKEN
-// ====================================================== */
+exports.verifyResetOtp = async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
 
-// const generateToken = (user) => {
-//   return jwt.sign(
-//     {
-//       id: user._id,
-//       role: user.role,
-//       tokenVersion: user.tokenVersion,
-//     },
-//     process.env.JWT_SECRET,
-//     { expiresIn: "7d" }
-//   );
-// };
+    if (!phone || !otp) {
+      return res.status(400).json({
+        message: "Phone and OTP required",
+      });
+    }
 
-// /* ======================================================
-//    REGISTER
-// ====================================================== */
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        message: "Invalid phone number",
+      });
+    }
 
-// exports.register = async (req, res) => {
-//   try {
-//     const { name, phone, password } = req.body;
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        message: "Invalid OTP format",
+      });
+    }
 
-//     if (!name || !phone || !password) {
-//       return res.status(400).json({ message: "All fields required" });
-//     }
+    const user = await User.findOne({ phone });
 
-//     const existing = await User.findOne({ phone });
-//     if (existing) {
-//       return res.status(400).json({ message: "User already exists" });
-//     }
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid request",
+      });
+    }
 
-//     await User.create({ name, phone, password });
+    // ✅ CHECK RESET OTP ONLY
+    if (!user.resetOtpCode || !user.resetOtpExpires) {
+      return res.status(400).json({
+        message: "No reset OTP requested",
+      });
+    }
 
-//     res.status(201).json({ message: "Account created successfully" });
-//   } catch (err) {
-//     console.error("Register Error:", err);
-//     res.status(500).json({ message: "Registration failed" });
-//   }
-// };
+    if (user.resetOtpExpires < Date.now()) {
+      return res.status(400).json({
+        message: "OTP expired",
+      });
+    }
 
-// /* ======================================================
-//    LOGIN
-// ====================================================== */
+    if (user.resetOtpCode !== otp) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
 
-// exports.login = async (req, res) => {
-//   try {
-//     const { phone, password } = req.body;
+    // ✅ Allow password reset
+    user.resetPasswordAllowed = true;
 
-//     if (!phone || !password) {
-//       return res.status(400).json({
-//         message: "Phone and password required",
-//       });
-//     }
+    // Clear reset OTP
+    user.resetOtpCode = undefined;
+    user.resetOtpExpires = undefined;
 
-//     const user = await User.findOne({ phone }).select("+password");
+    await user.save();
 
-//     if (!user) {
-//       return res.status(400).json({ message: "Invalid credentials" });
-//     }
+    return res.json({
+      message: "OTP verified successfully",
+    });
 
-//     if (user.isBlocked) {
-//       return res.status(403).json({ message: "Account blocked" });
-//     }
+  } catch (error) {
+    console.error("Verify Reset OTP Error:", error);
+    return res.status(500).json({
+      message: "OTP verification failed",
+    });
+  }
+};
 
-//     if (user.isLocked()) {
-//       return res.status(423).json({
-//         message: "Account temporarily locked. Try later.",
-//       });
-//     }
 
-//     const isMatch = await user.comparePassword(password);
+/* ======================================================
+   RESET PASSWORD (AFTER OTP VERIFIED)
+====================================================== */
 
-//     if (!isMatch) {
-//       await user.handleFailedLogin();
-//       return res.status(400).json({ message: "Invalid credentials" });
-//     }
+exports.resetPassword = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
 
-//     await user.resetLoginAttempts();
+    if (!phone || !password) {
+      return res.status(400).json({
+        message: "Phone and password required",
+      });
+    }
 
-//     user.lastLogin = new Date();
-//     await user.save();
+    if (password.length < 8) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters",
+      });
+    }
 
-//     const token = generateToken(user);
+    const user = await User.findOne({ phone }).select("+password");
 
-//     res.cookie("token", token, {
-//       httpOnly: true,
-//       secure: process.env.NODE_ENV === "production",
-//       sameSite: "lax",
-//       maxAge: 7 * 24 * 60 * 60 * 1000,
-//     });
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid request",
+      });
+    }
 
-//     res.json({ message: "Login successful" });
-//   } catch (err) {
-//     console.error("Login Error:", err);
-//     res.status(500).json({ message: "Login failed" });
-//   }
-// };
+    // 🔐 CRITICAL CHECK
+    if (!user.resetPasswordAllowed) {
+      return res.status(403).json({
+        message: "OTP verification required",
+      });
+    }
 
-// /* ======================================================
-//    GET ME
-// ====================================================== */
+    user.password = password; // will hash automatically
+    user.tokenVersion += 1;
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined;
 
-// exports.getMe = async (req, res) => {
-//   res.json(req.user);
-// };
+    // 🔥 Disable reset access after use
+    user.resetPasswordAllowed = false;
 
-// /* ======================================================
-//    LOGOUT
-// ====================================================== */
+    await user.save();
 
-// exports.logout = async (req, res) => {
-//   res.cookie("token", "", {
-//     httpOnly: true,
-//     expires: new Date(0),
-//   });
-
-//   res.json({ message: "Logged out successfully" });
-// };
-
-// /* ======================================================
-//    CHANGE PASSWORD
-// ====================================================== */
-
-// exports.changePassword = async (req, res) => {
-//   try {
-//     const { currentPassword, newPassword } = req.body;
-
-//     if (!currentPassword || !newPassword) {
-//       return res.status(400).json({
-//         message: "Both passwords required",
-//       });
-//     }
-
-//     if (newPassword.length < 8) {
-//       return res.status(400).json({
-//         message: "Password must be at least 8 characters",
-//       });
-//     }
-
-//     const user = await User.findById(req.user._id).select("+password");
-
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     const isMatch = await user.comparePassword(currentPassword);
-
-//     if (!isMatch) {
-//       return res.status(400).json({
-//         message: "Current password incorrect",
-//       });
-//     }
-
-//     user.password = newPassword;
-//     user.tokenVersion += 1; // invalidate old tokens
-//     await user.save();
-
-//     res.json({ message: "Password updated successfully" });
-//   } catch (err) {
-//     console.error("Change Password Error:", err);
-//     res.status(500).json({ message: "Password change failed" });
-//   }
-// };
+    return res.json({
+      message: "Password reset successful",
+    });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    return res.status(500).json({
+      message: "Password reset failed",
+    });
+  }
+};

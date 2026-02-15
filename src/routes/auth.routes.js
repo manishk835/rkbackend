@@ -10,23 +10,25 @@ const {
   logout,
   changePassword,
   forgotPassword,
+  verifyResetOtp,
+  resetPassword,
 } = require("../controllers/auth.controller");
 
 const { protect } = require("../middlewares/auth.middleware");
-
-/* ================= PUBLIC ROUTES ================= */
 
 router.post("/register", register);
 router.post("/verify-otp", verifyOTP);
 router.post("/resend-otp", resendOtp);
 router.post("/login", login);
 
-/* ================= PROTECTED ROUTES ================= */
+router.post("/forgot-password", forgotPassword);
+router.post("/verify-reset-otp", verifyResetOtp);
+router.post("/reset-password", resetPassword);
 
 router.get("/me", protect, getMe);
-router.post("/logout", protect, logout); // 🔥 logout should be protected
+router.post("/logout", logout);
 router.put("/change-password", protect, changePassword);
-router.post("/forgot-password", forgotPassword);
+
 
 module.exports = router;
 
