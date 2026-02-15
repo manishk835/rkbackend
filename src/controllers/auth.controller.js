@@ -1,8 +1,43 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const bcrypt = require("bcryptjs")
+const bcrypt = require("bcryptjs");
+const nodemailer = require("nodemailer");
 
-/* ================= TOKEN HELPER ================= */
+/* ======================================================
+   EMAIL TRANSPORTER (GMAIL)
+====================================================== */
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+/* ======================================================
+   SEND OTP EMAIL FUNCTION
+====================================================== */
+
+const sendOtpEmail = async (email, otp) => {
+  await transporter.sendMail({
+    from: `"RK Fashion" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: "RK Fashion - OTP Verification",
+    html: `
+      <div style="font-family:Arial;padding:20px">
+        <h2>OTP Verification</h2>
+        <p>Your verification code is:</p>
+        <h1 style="letter-spacing:5px">${otp}</h1>
+        <p>This OTP is valid for 10 minutes.</p>
+      </div>
+    `,
+  });
+};
+
+/* ======================================================
+   TOKEN HELPER
+====================================================== */
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -17,24 +52,19 @@ const generateToken = (user) => {
 };
 
 /* ======================================================
-   REGISTER (WITH OTP)
+   REGISTER (WITH OTP + EMAIL)
 ====================================================== */
 
 exports.register = async (req, res) => {
   try {
-    const { name, phone, password } = req.body;
+    const { name, phone, password, email } = req.body;
 
-    /* ===== BASIC VALIDATION ===== */
-    if (!name || !phone || !password) {
-      return res.status(400).json({
-        message: "All fields required",
-      });
+    if (!name || !phone || !password || !email) {
+      return res.status(400).json({ message: "All fields required" });
     }
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
-      return res.status(400).json({
-        message: "Invalid phone number",
-      });
+      return res.status(400).json({ message: "Invalid phone number" });
     }
 
     if (password.length < 8) {
@@ -43,49 +73,40 @@ exports.register = async (req, res) => {
       });
     }
 
-    let user = await User.findOne({ phone }).select("+password");
+    let user = await User.findOne({ phone });
 
-    /* ===== CASE 1: Already verified user ===== */
     if (user && user.isVerified) {
-      return res.status(400).json({
-        message: "User already exists",
-      });
+      return res.status(400).json({ message: "User already exists" });
     }
 
-    /* ===== CASE 2: New user ===== */
     if (!user) {
       user = new User({
         name: name.trim(),
         phone,
         password,
+        email,
       });
-    } 
-    /* ===== CASE 3: Existing but not verified ===== */
-    else {
+    } else {
       user.name = name.trim();
-      user.password = password; // will auto-hash
+      user.password = password;
+      user.email = email;
     }
 
-    /* ===== GENERATE OTP ===== */
     const otp = user.generateOTP();
     await user.save();
 
-    // ⚠️ Production me SMS bhejna hoga
-    console.log("📲 OTP for", phone, ":", otp);
+    await sendOtpEmail(email, otp);
 
     return res.status(200).json({
-      message: "OTP sent to your phone",
+      message: "OTP sent to your email",
       phone,
     });
 
   } catch (err) {
     console.error("Register Error:", err);
-    return res.status(500).json({
-      message: "Registration failed",
-    });
+    return res.status(500).json({ message: "Registration failed" });
   }
 };
-
 
 /* ======================================================
    VERIFY OTP
@@ -95,16 +116,9 @@ exports.verifyOTP = async (req, res) => {
   try {
     const { phone, otp } = req.body;
 
-    /* ===== BASIC VALIDATION ===== */
     if (!phone || !otp) {
       return res.status(400).json({
         message: "Phone and OTP required",
-      });
-    }
-
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      return res.status(400).json({
-        message: "Invalid phone number",
       });
     }
 
@@ -117,36 +131,25 @@ exports.verifyOTP = async (req, res) => {
     const user = await User.findOne({ phone });
 
     if (!user) {
-      return res.status(400).json({
-        message: "User not found",
-      });
+      return res.status(400).json({ message: "User not found" });
     }
 
     if (user.isVerified) {
       return res.status(400).json({
-        message: "Phone already verified",
+        message: "User already verified",
       });
     }
 
-    if (!user.otpCode || !user.otpExpires) {
+    if (!user.otpCode || user.otpExpires < Date.now()) {
       return res.status(400).json({
-        message: "No OTP requested",
-      });
-    }
-
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({
-        message: "OTP expired. Please request again",
+        message: "OTP expired. Please request again.",
       });
     }
 
     if (user.otpCode !== otp) {
-      return res.status(400).json({
-        message: "Invalid OTP",
-      });
+      return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    /* ===== SUCCESS ===== */
     user.isVerified = true;
     user.otpCode = undefined;
     user.otpExpires = undefined;
@@ -165,24 +168,17 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
-
 /* ======================================================
-   RESEND OTP
+   RESEND OTP (WITH RATE LIMIT FIXED)
 ====================================================== */
+
 exports.resendOtp = async (req, res) => {
   try {
     const { phone } = req.body;
 
-    /* ===== VALIDATION ===== */
     if (!phone) {
       return res.status(400).json({
         message: "Phone number required",
-      });
-    }
-
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      return res.status(400).json({
-        message: "Invalid phone number",
       });
     }
 
@@ -200,22 +196,20 @@ exports.resendOtp = async (req, res) => {
       });
     }
 
-    /* ===== RATE LIMIT (Prevent Spam) ===== */
-    // Agar OTP abhi bhi valid hai → resend allow nahi
+    // 🔒 Prevent spam (allow resend only after expiry)
     if (user.otpExpires && user.otpExpires > Date.now()) {
       return res.status(400).json({
         message: "OTP already sent. Please wait before requesting again.",
       });
     }
 
-    /* ===== GENERATE NEW OTP ===== */
-    const newOtp = user.generateOTP(); // use model method
+    const otp = user.generateOTP();
     await user.save();
 
-    console.log("🔁 Resent OTP for", phone, ":", newOtp);
+    await sendOtpEmail(user.email, otp);
 
     return res.json({
-      message: "OTP resent successfully",
+      message: "OTP resent to your email",
     });
 
   } catch (error) {
@@ -226,63 +220,10 @@ exports.resendOtp = async (req, res) => {
   }
 };
 
-
-
-
 /* ======================================================
-   LOGIN (ONLY VERIFIED USERS)
+   LOGIN
 ====================================================== */
 
-// exports.login = async (req, res) => {
-//   try {
-//     const { phone, password } = req.body;
-
-//     const user = await User.findOne({ phone }).select("+password");
-
-//     if (!user) {
-//       return res.status(400).json({ message: "Invalid credentials" });
-//     }
-
-//     if (!user.isVerified) {
-//       return res.status(403).json({
-//         message: "Please verify your phone first",
-//       });
-//     }
-
-//     if (user.isBlocked) {
-//       return res.status(403).json({ message: "Account blocked" });
-//     }
-
-//     if (user.isLocked()) {
-//       return res.status(423).json({
-//         message: "Account temporarily locked",
-//       });
-//     }
-
-//     const isMatch = await user.comparePassword(password);
-
-//     if (!isMatch) {
-//       return res.status(400).json({ message: "Invalid credentials" });
-//     }
-
-//     user.lastLogin = new Date();
-//     await user.save();
-
-//     const token = generateToken(user);
-
-//     res.cookie("token", token, {
-//       httpOnly: true,
-//       secure: process.env.NODE_ENV === "production",
-//       sameSite: "lax",
-//       maxAge: 7 * 24 * 60 * 60 * 1000,
-//     });
-
-//     res.json({ message: "Login successful" });
-//   } catch (err) {
-//     console.error("Login Error:", err);
-//     res.status(500).json({ message: "Login failed" });
-//   }
-// };
 exports.login = async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -313,19 +254,19 @@ exports.login = async (req, res) => {
       });
     }
 
-    if (user.isLocked()) {
+    if (user.lockUntil && user.lockUntil > Date.now()) {
       return res.status(423).json({
-        message: "Account temporarily locked. Try later.",
+        message: "Account temporarily locked",
       });
     }
 
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       user.failedLoginAttempts += 1;
 
       if (user.failedLoginAttempts >= 5) {
-        user.lockUntil = Date.now() + 15 * 60 * 1000; // 15 min lock
+        user.lockUntil = Date.now() + 15 * 60 * 1000;
       }
 
       await user.save();
@@ -335,7 +276,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // 🔥 Reset attempts on success
+    // Reset login attempts
     user.failedLoginAttempts = 0;
     user.lockUntil = undefined;
     user.lastLogin = new Date();
@@ -357,7 +298,6 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: "Login failed" });
   }
 };
-
 
 /* ======================================================
    GET ME
@@ -403,10 +343,15 @@ exports.changePassword = async (req, res) => {
     const user = await User.findById(req.user._id).select("+password");
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
 
-    const isMatch = await user.comparePassword(currentPassword);
+    const isMatch = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
 
     if (!isMatch) {
       return res.status(400).json({
@@ -415,13 +360,64 @@ exports.changePassword = async (req, res) => {
     }
 
     user.password = newPassword;
-    user.tokenVersion += 1; // invalidate old tokens
+    user.tokenVersion += 1;
     await user.save();
 
     res.json({ message: "Password updated successfully" });
+
   } catch (err) {
     console.error("Change Password Error:", err);
-    res.status(500).json({ message: "Password change failed" });
+    res.status(500).json({
+      message: "Password change failed",
+    });
+  }
+};
+
+/* ======================================================
+   FORGOT PASSWORD (SEND RESET OTP)
+====================================================== */
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { phone } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({
+        message: "Phone number required",
+      });
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        message: "Invalid phone number",
+      });
+    }
+
+    const user = await User.findOne({ phone });
+
+    // 🔐 Important: Do NOT reveal if user exists
+    if (!user) {
+      return res.json({
+        message: "If this number exists, OTP has been sent",
+      });
+    }
+
+    // Generate OTP
+    const otp = user.generateOTP();
+    await user.save();
+
+    // Send email OTP (since we are using Gmail)
+    await sendOtpEmail(user.email, otp);
+
+    return res.json({
+      message: "If this number exists, OTP has been sent",
+    });
+
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    return res.status(500).json({
+      message: "Failed to send OTP",
+    });
   }
 };
 

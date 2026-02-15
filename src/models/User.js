@@ -1,11 +1,10 @@
-// models/User.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const SALT_ROUNDS = 12;
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_TIME = 15 * 60 * 1000; // 15 min
-const OTP_EXPIRE_TIME = 10 * 60 * 1000; // 10 min
+const LOCK_TIME = 15 * 60 * 1000; // 15 minutes
+const OTP_EXPIRE_TIME = 10 * 60 * 1000; // 10 minutes
 
 const userSchema = new mongoose.Schema(
   {
@@ -26,6 +25,15 @@ const userSchema = new mongoose.Schema(
       match: /^[6-9]\d{9}$/,
     },
 
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: /^\S+@\S+\.\S+$/,
+    },
+
     password: {
       type: String,
       required: true,
@@ -39,16 +47,16 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
 
-        /* ================= WISHLIST ================= */
+    /* ================= WISHLIST ================= */
 
-        wishlist: [
-          {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Product",
-          },
-        ],
+    wishlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
 
-    /* ================= PHONE VERIFICATION ================= */
+    /* ================= VERIFICATION ================= */
 
     isVerified: {
       type: Boolean,
@@ -79,18 +87,19 @@ const userSchema = new mongoose.Schema(
 
     lastLogin: Date,
 
+    /* ================= LOYALTY ================= */
+
     loyaltyPoints: {
       type: Number,
       default: 0,
       min: 0,
     },
+    
   },
   { timestamps: true }
 );
 
-/* ======================================================
-   INDEXES (ONLY HERE — NO DUPLICATE)
-====================================================== */
+/* ================= INDEXES ================= */
 
 userSchema.index({ role: 1 });
 userSchema.index({ isBlocked: 1 });
@@ -115,12 +124,11 @@ userSchema.methods.isLocked = function () {
 
 userSchema.methods.generateOTP = function () {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
   this.otpCode = otp;
-  this.otpExpires = Date.now() + 10 * 60 * 1000;
-
+  this.otpExpires = Date.now() + OTP_EXPIRE_TIME;
   return otp;
 };
+
 
 
 module.exports = mongoose.model("User", userSchema);
@@ -130,17 +138,10 @@ module.exports = mongoose.model("User", userSchema);
 // const mongoose = require("mongoose");
 // const bcrypt = require("bcryptjs");
 
-// /* ======================================================
-//    CONSTANTS
-// ====================================================== */
-
 // const SALT_ROUNDS = 12;
 // const MAX_LOGIN_ATTEMPTS = 5;
-// const LOCK_TIME = 15 * 60 * 1000;
-
-// /* ======================================================
-//    SCHEMA
-// ====================================================== */
+// const LOCK_TIME = 15 * 60 * 1000; // 15 min
+// const OTP_EXPIRE_TIME = 10 * 60 * 1000; // 10 min
 
 // const userSchema = new mongoose.Schema(
 //   {
@@ -174,16 +175,26 @@ module.exports = mongoose.model("User", userSchema);
 //       default: "user",
 //     },
 
-//     /* ================= WISHLIST ================= */
+//         /* ================= WISHLIST ================= */
 
-//     wishlist: [
-//       {
-//         type: mongoose.Schema.Types.ObjectId,
-//         ref: "Product",
-//       },
-//     ],
+//         wishlist: [
+//           {
+//             type: mongoose.Schema.Types.ObjectId,
+//             ref: "Product",
+//           },
+//         ],
 
-//     /* ================= ACCOUNT SECURITY ================= */
+//     /* ================= PHONE VERIFICATION ================= */
+
+//     isVerified: {
+//       type: Boolean,
+//       default: false,
+//     },
+
+//     otpCode: String,
+//     otpExpires: Date,
+
+//     /* ================= SECURITY ================= */
 
 //     isBlocked: {
 //       type: Boolean,
@@ -204,8 +215,6 @@ module.exports = mongoose.model("User", userSchema);
 
 //     lastLogin: Date,
 
-//     /* ================= LOYALTY ================= */
-
 //     loyaltyPoints: {
 //       type: Number,
 //       default: 0,
@@ -223,20 +232,14 @@ module.exports = mongoose.model("User", userSchema);
 // userSchema.index({ isBlocked: 1 });
 // userSchema.index({ createdAt: -1 });
 
-// /* ======================================================
-//    PASSWORD HASH
-// ====================================================== */
+// /* ================= PASSWORD HASH ================= */
 
 // userSchema.pre("save", async function () {
 //   if (!this.isModified("password")) return;
-
 //   this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
 // });
 
-
-// /* ======================================================
-//    METHODS
-// ====================================================== */
+// /* ================= METHODS ================= */
 
 // userSchema.methods.comparePassword = function (candidate) {
 //   return bcrypt.compare(candidate, this.password);
@@ -246,25 +249,14 @@ module.exports = mongoose.model("User", userSchema);
 //   return this.lockUntil && this.lockUntil > Date.now();
 // };
 
-// userSchema.methods.handleFailedLogin = async function () {
-//   this.failedLoginAttempts += 1;
+// userSchema.methods.generateOTP = function () {
+//   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-//   if (this.failedLoginAttempts >= MAX_LOGIN_ATTEMPTS) {
-//     this.lockUntil = Date.now() + LOCK_TIME;
-//   }
+//   this.otpCode = otp;
+//   this.otpExpires = Date.now() + 10 * 60 * 1000;
 
-//   await this.save();
+//   return otp;
 // };
 
-// userSchema.methods.resetLoginAttempts = async function () {
-//   this.failedLoginAttempts = 0;
-//   this.lockUntil = undefined;
-//   await this.save();
-// };
-
-// /* ======================================================
-//    EXPORT
-// ====================================================== */
 
 // module.exports = mongoose.model("User", userSchema);
-
