@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
+const addressRoutes = require("./routes/address.routes");
 
 dotenv.config();
 connectDB();
@@ -94,7 +95,7 @@ app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/wishlist", require("./routes/wishlist.routes"));
 app.use("/api/payment", require("./routes/payment.routes"));
 app.use("/api/upload", require("./routes/upload.routes"));
-app.use("/api/address", require("./routes/address"));
+app.use("/api/addresses", addressRoutes);
 app.use("/api/categories", require("./routes/category.routes"));
 
 /* ======================================================
