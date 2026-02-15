@@ -1,9 +1,12 @@
+// routes/address.routes.js
+
 const express = require("express");
 const router = express.Router();
 
 const {
-  getMyAddresses,
   createAddress,
+  getUserAddresses,
+  updateAddress,
   deleteAddress,
   setDefaultAddress,
 } = require("../controllers/address.controller");
@@ -14,12 +17,19 @@ const { protect } = require("../middlewares/auth.middleware");
    ALL ROUTES PROTECTED (USER LOGIN REQUIRED)
 ====================================================== */
 
-router.get("/", protect, getMyAddresses);
-
+// ➕ Create new address
 router.post("/", protect, createAddress);
 
+// 📦 Get all user addresses
+router.get("/", protect, getUserAddresses);
+
+// ✏️ Update address
+router.put("/:id", protect, updateAddress);
+
+// ❌ Delete address
 router.delete("/:id", protect, deleteAddress);
 
-router.put("/:id/default", protect, setDefaultAddress);
+// ⭐ Set default address
+router.patch("/:id/default", protect, setDefaultAddress);
 
 module.exports = router;

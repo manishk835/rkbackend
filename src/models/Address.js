@@ -1,3 +1,4 @@
+// // models/Address.js
 const mongoose = require("mongoose");
 
 const addressSchema = new mongoose.Schema(
@@ -51,7 +52,7 @@ addressSchema.index({ user: 1 });
 module.exports = mongoose.model("Address", addressSchema);
 
 
-// // models/Address.js
+
 // const mongoose = require("mongoose");
 
 // const addressSchema = new mongoose.Schema(

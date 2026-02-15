@@ -103,6 +103,23 @@ const OrderSchema = new mongoose.Schema(
     
 
     returnRequestedAt: Date,
+
+/* ================= PAYMENT DETAILS ================= */
+razorpay: {
+  orderId: String,
+  paymentId: String,
+  signature: String,
+},
+
+paymentLogs: [
+  {
+    event: String,
+    payload: Object,
+    createdAt: { type: Date, default: Date.now }
+  }
+],
+
+
   },
   { timestamps: true }
 );
@@ -112,93 +129,3 @@ OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ status: 1 });
 
 module.exports = mongoose.model("Order", OrderSchema);
-
-
-// // models/Order.js
-
-// const mongoose = require("mongoose");
-
-// const OrderSchema = new mongoose.Schema(
-//   {
-//     user: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "User",
-//       required: true,
-//     },
-
-//     customer: {
-//       name: { type: String, required: true },
-//       phone: { type: String, required: true },
-//       address: { type: String, required: true },
-//       city: { type: String, required: true },
-//       pincode: { type: String, required: true },
-//     },
-
-//     items: [
-//       {
-//         productId: {
-//           type: mongoose.Schema.Types.ObjectId,
-//           ref: "Product",
-//           required: true,
-//         },
-//         title: { type: String, required: true },
-//         price: { type: Number, required: true },
-//         quantity: { type: Number, required: true },
-//       },
-//     ],
-
-//     subtotal: { type: Number, required: true },
-//     discount: { type: Number, default: 0 },
-//     totalAmount: { type: Number, required: true },
-
-//     paymentMethod: {
-//       type: String,
-//       enum: ["COD", "RAZORPAY"],
-//       required: true,
-//     },
-
-//     paymentStatus: {
-//       type: String,
-//       enum: ["PENDING", "INITIATED", "PAID", "FAILED"],
-//       default: "PENDING",
-//     },
-
-//     status: {
-//       type: String,
-//       enum: [
-//         "Pending",
-//         "Confirmed",
-//         "Packed",
-//         "Shipped",
-//         "Delivered",
-//         "Cancelled",
-//       ],
-//       default: "Pending",
-//     },
-
-//     statusHistory: [
-//       {
-//         status: {
-//           type: String,
-//         },
-//         updatedAt: {
-//           type: Date,
-//           default: Date.now,
-//         },
-//       },
-//     ],
-
-//     /* NEW FIELDS */
-//     estimatedDelivery: Date,
-
-//     cancelledAt: Date,
-
-//     isReturnRequested: {
-//       type: Boolean,
-//       default: false,
-//     },
-//   },
-//   { timestamps: true }
-// );
-
-// module.exports = mongoose.model("Order", OrderSchema);

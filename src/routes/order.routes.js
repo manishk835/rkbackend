@@ -10,7 +10,9 @@ const {
   exportOrdersCSV,
   cancelOrder,
   requestReturn,
-  downloadInvoice
+  downloadInvoice,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
 } = require("../controllers/order.controller");
 
 const { protect, adminAuth } = require("../middlewares/auth.middleware");
@@ -23,6 +25,9 @@ router.get("/my", protect, getUserOrders);
 router.put("/:id/cancel", protect, cancelOrder);
 router.put("/:id/return", protect, requestReturn);
 router.get("/:id/invoice", protect, downloadInvoice);
+
+router.post("/razorpay/create", protect, createRazorpayOrder);
+router.post("/razorpay/verify", protect, verifyRazorpayPayment);
 
 
 /* ================= ADMIN ROUTES ================= */

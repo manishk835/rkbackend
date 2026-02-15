@@ -4,6 +4,15 @@ const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
 /* ======================================================
    CREATE ORDER (USER)
 ====================================================== */
@@ -77,8 +86,6 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
-
-
 
 
 /* ======================================================
@@ -376,58 +383,162 @@ exports.downloadInvoice = async (req, res) => {
 
 };
 
+/* ======================================================
+   CREATE RAZORPAY ORDER (SECURE)
+====================================================== */
+exports.createRazorpayOrder = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ message: "Invalid order ID" });
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (order.paymentStatus === "PAID") {
+      return res.status(400).json({ message: "Order already paid" });
+    }
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: order.totalAmount * 100,
+      currency: "INR",
+      receipt: `rk_${order._id}`,
+    });
+
+    order.paymentStatus = "INITIATED";
+    await order.save();
+
+    return res.json({
+      id: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      key: process.env.RAZORPAY_KEY_ID,
+    });
+
+  } catch (error) {
+    console.error("Razorpay Create Error:", error);
+    return res.status(500).json({ message: "Razorpay order failed" });
+  }
+};
 
 
 /* ======================================================
-   CHANGE PASSWORD (USER - PROTECTED)
+   VERIFY PAYMENT (SECURE + IDEMPOTENT)
 ====================================================== */
-// exports.changePassword = async (req, res) => {
-//   try {
-//     const userId = req.user._id;
-//     const { currentPassword, newPassword } = req.body;
+exports.verifyRazorpayPayment = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderId,
+    } = req.body;
 
-//     if (!currentPassword || !newPassword) {
-//       return res.status(400).json({
-//         message: "Both current and new password required",
-//       });
-//     }
+    const order = await Order.findById(orderId);
 
-//     if (newPassword.length < 6) {
-//       return res.status(400).json({
-//         message: "Password must be at least 6 characters",
-//       });
-//     }
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-//     const user = await User.findById(userId).select("+password");
+    if (order.paymentStatus === "PAID") {
+      return res.json({ message: "Already verified" });
+    }
 
-//     if (!user) {
-//       return res.status(404).json({
-//         message: "User not found",
-//       });
-//     }
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-//     const isMatch = await bcrypt.compare(
-//       currentPassword,
-//       user.password
-//     );
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body)
+      .digest("hex");
 
-//     if (!isMatch) {
-//       return res.status(400).json({
-//         message: "Current password incorrect",
-//       });
-//     }
+    if (expectedSignature !== razorpay_signature) {
+      order.paymentStatus = "FAILED";
+      await order.save();
+      return res.status(400).json({ message: "Invalid signature" });
+    }
 
-//     user.password = newPassword; // 🔥 auto hash via pre-save
-//     await user.save();
+    order.paymentStatus = "PAID";
+    order.status = "Confirmed";
 
-//     return res.json({
-//       message: "Password updated successfully",
-//     });
-//   } catch (error) {
-//     console.error("Change Password Error:", error);
-//     return res.status(500).json({
-//       message: "Password change failed",
-//     });
-//   }
-// };
+    order.razorpay = {
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+    };
 
+    order.statusHistory.push({
+      status: "Confirmed",
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    return res.json({ success: true });
+
+  } catch (error) {
+    console.error("Verify Error:", error);
+    return res.status(500).json({ message: "Payment verification failed" });
+  }
+};
+
+exports.refundPayment = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    const order = await Order.findById(orderId);
+
+    if (!order || order.paymentStatus !== "PAID") {
+      return res.status(400).json({ message: "Invalid order" });
+    }
+
+    const refund = await razorpay.payments.refund(
+      order.razorpay.paymentId,
+      {
+        amount: order.totalAmount * 100,
+      }
+    );
+
+    order.paymentStatus = "REFUNDED";
+    order.status = "Cancelled";
+
+    order.paymentLogs.push({
+      event: "refund.processed",
+      payload: refund,
+    });
+
+    await order.save();
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error("Refund Error:", error);
+    res.status(500).json({ message: "Refund failed" });
+  }
+};
+
+exports.getPaymentAnalytics = async (req, res) => {
+  const totalRevenue = await Order.aggregate([
+    { $match: { paymentStatus: "PAID" } },
+    { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+  ]);
+
+  const totalOrders = await Order.countDocuments();
+  const paidOrders = await Order.countDocuments({
+    paymentStatus: "PAID",
+  });
+
+  res.json({
+    totalRevenue: totalRevenue[0]?.total || 0,
+    totalOrders,
+    paidOrders,
+  });
+};

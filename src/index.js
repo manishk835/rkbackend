@@ -1,4 +1,5 @@
 // index.js
+
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -6,12 +7,12 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
-const addressRoutes = require("./routes/address.routes");
 
 dotenv.config();
 connectDB();
 
 const app = express();
+app.use("/api/webhook", require("./routes/webhook.routes"));
 
 /* ======================================================
    BODY PARSERS
@@ -93,9 +94,9 @@ app.use("/api/admin", require("./routes/admin.routes"));
 app.use("/api/products", require("./routes/product.routes"));
 app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/wishlist", require("./routes/wishlist.routes"));
-app.use("/api/payment", require("./routes/payment.routes"));
 app.use("/api/upload", require("./routes/upload.routes"));
-app.use("/api/addresses", addressRoutes);
+app.use("/api/address", require("./routes/address.routes"));
+
 app.use("/api/categories", require("./routes/category.routes"));
 
 /* ======================================================
