@@ -99,11 +99,12 @@ userSchema.index({ createdAt: -1 });
    PASSWORD HASH
 ====================================================== */
 
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+
   this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
-  next();
 });
+
 
 /* ======================================================
    METHODS
@@ -138,3 +139,4 @@ userSchema.methods.resetLoginAttempts = async function () {
 ====================================================== */
 
 module.exports = mongoose.model("User", userSchema);
+
