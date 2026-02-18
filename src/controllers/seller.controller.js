@@ -1,3 +1,4 @@
+// src/controllers/seller.controller.js
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 const User = require("../models/User");
@@ -5,8 +6,8 @@ const User = require("../models/User");
 /* ================= SELLER PRODUCTS ================= */
 exports.getSellerProducts = async (req, res) => {
   const products = await Product.find({
-    createdBy: req.seller._id,
-  }).sort({ createdAt: -1 });
+    seller: req.user._id,
+    }).sort({ createdAt: -1 });
 
   res.json(products);
 };
@@ -25,8 +26,8 @@ exports.getSellerDashboard = async (req, res) => {
   const sellerId = req.seller._id;
 
   const totalProducts = await Product.countDocuments({
-    createdBy: sellerId,
-  });
+    seller: req.user._id,
+    });
 
   const totalOrders = await Order.countDocuments({
     "items.seller": sellerId,

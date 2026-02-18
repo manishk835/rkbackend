@@ -58,22 +58,21 @@ exports.createProduct = async (req, res) => {
     });
 
     const product = await Product.create({
-      title: cleanTitle,
+      title,
       slug,
       price,
-      category: cleanCategory,
-      subCategory: cleanSubCategory,
-      brand: cleanBrand,
+      category: category.toLowerCase(),
+      subCategory: subCategory?.toLowerCase(),
+      brand: brand?.toLowerCase(),
       description,
       variants: cleanVariants,
       totalStock,
       thumbnail,
       images,
       tags,
-      isActive,
-      createdBy: req.admin?._id || req.seller?._id,
+      seller: req.user._id,   // ✅ correct
+      isApproved: false,
     });
-    
 
     res.status(201).json({
       message: "Product submitted for approval",
@@ -419,8 +418,10 @@ exports.getProductById = async (req, res) => {
   
       const products = await Product.find({
         isActive: true,
+        isApproved: true,
         $text: { $search: q },
       })
+      
         .select("title slug price thumbnail rating")
         .limit(20)
         .lean();
@@ -452,7 +453,9 @@ exports.getAllProducts = async (req, res) => {
     /* ================= BASE FILTER ================= */
     const filter = {
       isActive: true,
+      isApproved: true,
     };
+    
 
     if (brand) {
       filter.brand = { $in: brand.split(",") };

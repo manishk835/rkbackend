@@ -89,7 +89,7 @@ exports.createOrder = async (req, res) => {
 
       orderItems.push({
         productId: product._id,
-        seller: product.createdBy,
+        seller: product.seller,
         title: product.title,
         price: product.price,
         quantity: cartItem.quantity,

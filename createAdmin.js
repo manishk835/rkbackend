@@ -14,9 +14,11 @@ mongoose.connect(process.env.MONGO_URI);
 
   await User.create({
     name: "Super Admin",
+    phone: "9876543210",   // ✅ required
     email: "admin@example.com",
-    password: "Admin@123",
+    password: "admin@123",
     role: "admin",
+    isVerified: true      // optional but recommended
   });
 
   console.log("Admin created successfully");

@@ -16,102 +16,52 @@ exports.protect = async (req, res, next) => {
     const token = req.cookies?.token;
 
     if (!token) {
-      return res.status(401).json({
-        message: "Authentication required",
-      });
+      return res.status(401).json({ message: "Authentication required" });
     }
 
-    let decoded;
-
-    try {
-      decoded = verifyToken(token);
-    } catch (err) {
-      return res.status(401).json({
-        message: "Invalid or expired token",
-      });
-    }
+    const decoded = verifyToken(token);
 
     const user = await User.findById(decoded.id);
 
     if (!user) {
-      return res.status(401).json({
-        message: "User not found",
-      });
+      return res.status(401).json({ message: "User not found" });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({
-        message: "Account blocked",
-      });
+      return res.status(403).json({ message: "Account blocked" });
     }
 
     if (decoded.tokenVersion !== user.tokenVersion) {
-      return res.status(401).json({
-        message: "Session invalidated",
-      });
+      return res.status(401).json({ message: "Session invalidated" });
     }
 
     req.user = user;
     next();
 
   } catch (error) {
-    return res.status(500).json({
-      message: "Authentication failed",
-    });
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 
 /* ======================================================
-   GENERIC ROLE CHECK
+   REQUIRE ROLE
 ====================================================== */
 exports.requireRole = (role) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({
-        message: "Authentication required",
-      });
+      return res.status(401).json({ message: "Authentication required" });
     }
 
     if (req.user.role !== role) {
-      return res.status(403).json({
-        message: `${role} access required`,
-      });
+      return res.status(403).json({ message: `${role} access required` });
     }
 
     next();
   };
 };
 
-exports.sellerAuth = async (req, res, next) => {
-  try {
-    const token = req.cookies?.token;
-    if (!token)
-      return res.status(401).json({ message: "Authentication required" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user || user.role !== "seller") {
-      return res.status(403).json({ message: "Seller access required" });
-    }
-
-    if (user.sellerStatus !== "approved") {
-      return res.status(403).json({
-        message: "Seller account not approved yet",
-      });
-    }
-
-    req.seller = user;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-};
-
-
-
 /* ======================================================
-   ADMIN SHORTCUT
+   ADMIN AUTH
 ====================================================== */
 exports.adminAuth = [
   exports.protect,
@@ -119,9 +69,17 @@ exports.adminAuth = [
 ];
 
 /* ======================================================
-   SELLER SHORTCUT
+   SELLER AUTH (APPROVED ONLY)
 ====================================================== */
 exports.sellerAuth = [
   exports.protect,
   exports.requireRole("seller"),
+  async (req, res, next) => {
+    if (req.user.sellerStatus !== "approved") {
+      return res.status(403).json({
+        message: "Seller account not approved yet",
+      });
+    }
+    next();
+  },
 ];
