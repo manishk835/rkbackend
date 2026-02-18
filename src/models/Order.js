@@ -11,6 +11,38 @@ const allowedStatuses = [
   "Cancelled",
 ];
 
+/* ================= ITEM SCHEMA ================= */
+items: [
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+
+    seller: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    title: { type: String, required: true },
+    price: { type: Number, required: true },
+    quantity: { type: Number, required: true },
+
+    commission: {
+      type: Number,
+      default: 10, // 10% default
+    },
+
+    sellerEarning: {
+      type: Number,
+      default: 0,
+    },
+  },
+];
+
 const OrderSchema = new mongoose.Schema(
   {
     /* ================= USER ================= */
@@ -30,23 +62,10 @@ const OrderSchema = new mongoose.Schema(
       pincode: { type: String, required: true },
     },
 
-    /* ================= ITEMS ================= */
-    items: [
-      {
-        productId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
-        title: { type: String, required: true },
-        price: { type: Number, required: true },
-        quantity: { type: Number, required: true },
-      },
-    ],
-
     /* ================= PRICING ================= */
     subtotal: { type: Number, required: true },
     discount: { type: Number, default: 0 },
+    platformCommission: { type: Number, default: 0 },
     totalAmount: { type: Number, required: true },
 
     /* ================= PAYMENT ================= */
@@ -83,12 +102,7 @@ const OrderSchema = new mongoose.Schema(
     ],
 
     /* ================= DELIVERY ================= */
-    estimatedDelivery: {
-      type: Date,
-    },
-
-    /* ================= CANCEL ================= */
-    cancelledAt: Date,
+    estimatedDelivery: Date,
 
     /* ================= RETURN ================= */
     isReturnRequested: {
@@ -96,30 +110,20 @@ const OrderSchema = new mongoose.Schema(
       default: false,
     },
 
-    loyaltyPointsEarned: {
-      type: Number,
-      default: 0,
+    /* ================= PAYMENT DETAILS ================= */
+    razorpay: {
+      orderId: String,
+      paymentId: String,
+      signature: String,
     },
-    
 
-    returnRequestedAt: Date,
-
-/* ================= PAYMENT DETAILS ================= */
-razorpay: {
-  orderId: String,
-  paymentId: String,
-  signature: String,
-},
-
-paymentLogs: [
-  {
-    event: String,
-    payload: Object,
-    createdAt: { type: Date, default: Date.now }
-  }
-],
-
-
+    paymentLogs: [
+      {
+        event: String,
+        payload: Object,
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -127,5 +131,24 @@ paymentLogs: [
 /* ================= INDEXES ================= */
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ status: 1 });
+OrderSchema.index({ "items.seller": 1 });
+
+/* ================= AUTO COMMISSION CALC ================= */
+OrderSchema.pre("save", function () {
+  let totalCommission = 0;
+
+  this.items.forEach((item) => {
+    const itemTotal = item.price * item.quantity;
+
+    const commission =
+      (itemTotal * item.commissionPercent) / 100;
+
+    item.sellerEarning = itemTotal - commission;
+
+    totalCommission += commission;
+  });
+
+  this.platformCommission = totalCommission;
+});
 
 module.exports = mongoose.model("Order", OrderSchema);

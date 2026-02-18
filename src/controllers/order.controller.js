@@ -1,4 +1,4 @@
-// controllers/order.controller.js
+// src/controllers/order.controller.js
 const Order = require("../models/Order");
 const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
@@ -14,17 +14,17 @@ const razorpay = new Razorpay({
 });
 
 /* ======================================================
-   CREATE ORDER (USER)
+   CREATE ORDER (
 ====================================================== */
-/* ======================================================
-   CREATE ORDER (USER)
-====================================================== */
+const Product = require("../models/Product");
+
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user._id;
     const { customer, items, discount = 0, paymentMethod } = req.body;
 
-    /* ===== BASIC VALIDATION ===== */
+    /* ================= VALIDATION ================= */
+
     if (!customer?.name || !customer?.phone || !customer?.address) {
       return res.status(400).json({
         message: "Customer details incomplete",
@@ -43,33 +43,81 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    /* ===== SERVER SIDE PRICE CALCULATION ===== */
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
+    /* ================= FETCH PRODUCTS FROM DB ================= */
+
+    const productIds = items.map((i) => i.productId);
+
+    const products = await Product.find({
+      _id: { $in: productIds },
+      isActive: true,
+    });
+
+    if (products.length !== items.length) {
+      return res.status(400).json({
+        message: "Some products not available",
+      });
+    }
+
+    let subtotal = 0;
+    const orderItems = [];
+
+    for (const cartItem of items) {
+      const product = products.find(
+        (p) => p._id.toString() === cartItem.productId
+      );
+
+      if (!product) {
+        return res.status(400).json({
+          message: "Product not found",
+        });
+      }
+
+      if (!product.inStock || product.totalStock < cartItem.quantity) {
+        return res.status(400).json({
+          message: `${product.title} is out of stock`,
+        });
+      }
+
+      const itemTotal = product.price * cartItem.quantity;
+
+      subtotal += itemTotal;
+
+      const commissionPercent = 10;
+      const commissionAmount = (itemTotal * commissionPercent) / 100;
+
+      const sellerEarning = itemTotal - commissionAmount;
+
+      orderItems.push({
+        productId: product._id,
+        seller: product.createdBy,
+        title: product.title,
+        price: product.price,
+        quantity: cartItem.quantity,
+        commission: commissionPercent,
+        sellerEarning,
+      });
+
+      // 🔥 REDUCE STOCK
+      product.totalStock -= cartItem.quantity;
+      await product.save();
+    }
 
     const validDiscount = discount > subtotal ? 0 : discount;
     const totalAmount = subtotal - validDiscount;
 
-    /* ===== ESTIMATED DELIVERY (5 Days) ===== */
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
-
-    /* ===== LOYALTY POINTS ===== */
-    const loyaltyPointsEarned = Math.floor(totalAmount / 100);
 
     const order = await Order.create({
       user: userId,
       customer,
-      items,
+      items: orderItems,
       subtotal,
       discount: validDiscount,
       totalAmount,
       paymentMethod,
       status: "Pending",
       estimatedDelivery,
-      loyaltyPointsEarned,
       statusHistory: [
         {
           status: "Pending",
@@ -87,14 +135,14 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-
 /* ======================================================
    USER – GET MY ORDERS
 ====================================================== */
 exports.getUserOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user._id })
-      .sort({ createdAt: -1 });
+    const orders = await Order.find({ user: req.user._id }).sort({
+      createdAt: -1,
+    });
 
     return res.json(orders);
   } catch (error) {
@@ -108,12 +156,7 @@ exports.getUserOrders = async (req, res) => {
 ====================================================== */
 exports.getAllOrders = async (req, res) => {
   try {
-    const {
-      status,
-      page = 1,
-      limit = 10,
-      search,
-    } = req.query;
+    const { status, page = 1, limit = 10, search } = req.query;
 
     const filter = {};
 
@@ -142,7 +185,7 @@ exports.getAllOrders = async (req, res) => {
 
     const [orders, total] = await Promise.all([
       Order.find(filter)
-      .populate("user", "name phone role")
+        .populate("user", "name phone role")
 
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -198,11 +241,18 @@ exports.updateOrderStatus = async (req, res) => {
     /* ===== GIVE LOYALTY POINTS WHEN DELIVERED ===== */
     if (status === "Delivered") {
       const User = require("../models/User");
-
+    
+      for (const item of order.items) {
+        await User.findByIdAndUpdate(item.seller, {
+          $inc: { walletBalance: item.sellerEarning || 0 },
+        });
+      }
+    
       await User.findByIdAndUpdate(order.user, {
-        $inc: { loyaltyPoints: order.loyaltyPointsEarned },
+        $inc: { loyaltyPoints: order.loyaltyPointsEarned || 0 },
       });
     }
+    
 
     await order.save();
 
@@ -214,7 +264,6 @@ exports.updateOrderStatus = async (req, res) => {
     });
   }
 };
-
 
 /* ======================================================
    ADMIN – GET SINGLE ORDER
@@ -255,8 +304,7 @@ exports.exportOrdersCSV = async (req, res) => {
       createdAt: -1,
     });
 
-    let csv =
-      "OrderID,Name,Phone,Total,Status,Date\n";
+    let csv = "OrderID,Name,Phone,Total,Status,Date\n";
 
     orders.forEach((o) => {
       csv += `"${o._id}","${o.customer.name}","${o.customer.phone}","${o.totalAmount}","${o.status}","${o.createdAt}"\n`;
@@ -270,7 +318,6 @@ exports.exportOrdersCSV = async (req, res) => {
     return res.status(500).send("Export failed");
   }
 };
-
 
 /* ======================================================
    USER – CANCEL ORDER
@@ -286,8 +333,7 @@ exports.cancelOrder = async (req, res) => {
       user: req.user._id,
     });
 
-    if (!order)
-      return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (order.status === "Cancelled")
       return res.status(400).json({ message: "Already cancelled" });
@@ -312,7 +358,6 @@ exports.cancelOrder = async (req, res) => {
   }
 };
 
-
 /* ======================================================
    USER – REQUEST RETURN
 ====================================================== */
@@ -327,8 +372,7 @@ exports.requestReturn = async (req, res) => {
       user: req.user._id,
     });
 
-    if (!order)
-      return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (order.status !== "Delivered") {
       return res.status(400).json({
@@ -354,8 +398,6 @@ exports.requestReturn = async (req, res) => {
   }
 };
 
-
-
 exports.downloadInvoice = async (req, res) => {
   const order = await Order.findById(req.params.id);
 
@@ -379,8 +421,6 @@ exports.downloadInvoice = async (req, res) => {
   doc.text(`Total: ₹${order.totalAmount}`);
 
   doc.end();
-
-
 };
 
 /* ======================================================
@@ -423,13 +463,11 @@ exports.createRazorpayOrder = async (req, res) => {
       currency: razorpayOrder.currency,
       key: process.env.RAZORPAY_KEY_ID,
     });
-
   } catch (error) {
     console.error("Razorpay Create Error:", error);
     return res.status(500).json({ message: "Razorpay order failed" });
   }
 };
-
 
 /* ======================================================
    VERIFY PAYMENT (SECURE + IDEMPOTENT)
@@ -483,7 +521,6 @@ exports.verifyRazorpayPayment = async (req, res) => {
     await order.save();
 
     return res.json({ success: true });
-
   } catch (error) {
     console.error("Verify Error:", error);
     return res.status(500).json({ message: "Payment verification failed" });
@@ -500,12 +537,9 @@ exports.refundPayment = async (req, res) => {
       return res.status(400).json({ message: "Invalid order" });
     }
 
-    const refund = await razorpay.payments.refund(
-      order.razorpay.paymentId,
-      {
-        amount: order.totalAmount * 100,
-      }
-    );
+    const refund = await razorpay.payments.refund(order.razorpay.paymentId, {
+      amount: order.totalAmount * 100,
+    });
 
     order.paymentStatus = "REFUNDED";
     order.status = "Cancelled";
@@ -518,7 +552,6 @@ exports.refundPayment = async (req, res) => {
     await order.save();
 
     res.json({ success: true });
-
   } catch (error) {
     console.error("Refund Error:", error);
     res.status(500).json({ message: "Refund failed" });

@@ -1,6 +1,7 @@
 // src/controllers/admin.controller.js
+
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
+const User = require("../models/User");
 
 /* ======================================================
    ADMIN LOGIN
@@ -15,16 +16,15 @@ exports.adminLogin = async (req, res) => {
       });
     }
 
-    if (email !== process.env.ADMIN_EMAIL) {
+    const admin = await User.findOne({ email }).select("+password");
+
+    if (!admin || admin.role !== "admin") {
       return res.status(401).json({
         message: "Invalid credentials",
       });
     }
 
-    const isMatch = await bcrypt.compare(
-      password,
-      process.env.ADMIN_PASSWORD_HASH
-    );
+    const isMatch = await admin.comparePassword(password);
 
     if (!isMatch) {
       return res.status(401).json({
@@ -34,8 +34,9 @@ exports.adminLogin = async (req, res) => {
 
     const token = jwt.sign(
       {
-        role: "admin",
-        email: process.env.ADMIN_EMAIL,
+        id: admin._id,
+        role: admin.role,
+        tokenVersion: admin.tokenVersion,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
@@ -51,14 +52,11 @@ exports.adminLogin = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    res.json({
-      message: "Admin login successful",
-    });
+    res.json({ message: "Admin login successful" });
+
   } catch (error) {
     console.error("Admin Login Error:", error);
-    res.status(500).json({
-      message: "Login failed",
-    });
+    res.status(500).json({ message: "Login failed" });
   }
 };
 
@@ -72,4 +70,66 @@ exports.adminLogout = async (req, res) => {
   });
 
   res.json({ message: "Admin logged out" });
+};
+
+/* ======================================================
+   GET PENDING SELLERS
+====================================================== */
+exports.getPendingSellers = async (req, res) => {
+  try {
+    const sellers = await User.find({
+      role: "seller",
+      sellerStatus: "pending",
+    }).select("-password");
+
+    res.json(sellers);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch sellers" });
+  }
+};
+
+/* ======================================================
+   APPROVE SELLER
+====================================================== */
+exports.approveSeller = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user || user.role !== "seller") {
+      return res.status(404).json({ message: "Seller not found" });
+    }
+
+    user.sellerStatus = "approved";
+    user.sellerApprovedAt = new Date();
+
+    await user.save();
+
+    res.json({ message: "Seller approved successfully" });
+
+  } catch (error) {
+    res.status(500).json({ message: "Approval failed" });
+  }
+};
+
+/* ======================================================
+   REJECT SELLER
+====================================================== */
+exports.rejectSeller = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user || user.role !== "seller") {
+      return res.status(404).json({ message: "Seller not found" });
+    }
+
+    user.sellerStatus = "rejected";
+    user.sellerRejectedAt = new Date();
+
+    await user.save();
+
+    res.json({ message: "Seller rejected successfully" });
+
+  } catch (error) {
+    res.status(500).json({ message: "Rejection failed" });
+  }
 };

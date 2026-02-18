@@ -96,7 +96,7 @@ app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/wishlist", require("./routes/wishlist.routes"));
 app.use("/api/upload", require("./routes/upload.routes"));
 app.use("/api/address", require("./routes/address.routes"));
-
+app.use("/api/seller", require("./routes/seller.routes"));
 app.use("/api/categories", require("./routes/category.routes"));
 
 /* ======================================================

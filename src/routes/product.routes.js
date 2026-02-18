@@ -1,53 +1,89 @@
+// src/routes/product.routes.js
+
 const express = require("express");
 const router = express.Router();
 
 const {
+  /* SELLER */
   createProduct,
+  getMyProducts,
+
+  /* ADMIN */
+  approveProduct,
+  getPendingProducts,
+  updateProduct,
+  getLowStockProducts,
+
+  /* PUBLIC */
   getProducts,
   getAllProducts,
   getProductBySlug,
   getProductById,
   searchProducts,
   getProductsByCategory,
-  updateProduct,
-  getLowStockProducts, // ✅ LOW STOCK
 } = require("../controllers/product.controller");
 
-const { adminAuth } = require("../middlewares/auth.middleware");
+const {
+  protect,
+  adminAuth,
+} = require("../middlewares/auth.middleware");
 
 /* ======================================================
-   PUBLIC ROUTES
-   ====================================================== */
+   PUBLIC ROUTES (CUSTOMER SIDE)
+====================================================== */
 
-// Get products (homepage / general)
+// Homepage / general listing
 router.get("/", getProducts);
 
-// Get all products (admin / full list if needed)
+// All products with filters
 router.get("/all", getAllProducts);
 
-// Search products
+// Search
 router.get("/search", searchProducts);
 
-// Products by category + filters
+// Category filter
 router.get("/category/:category", getProductsByCategory);
 
-// Product detail by slug
+// Product detail
 router.get("/slug/:slug", getProductBySlug);
-
-// Product detail by id
 router.get("/id/:id", getProductById);
 
 /* ======================================================
+   SELLER ROUTES
+====================================================== */
+
+// Create product (seller submits)
+router.post("/seller/create", protect, createProduct);
+
+// Seller dashboard → My products
+router.get("/seller/my-products", protect, getMyProducts);
+
+/* ======================================================
    ADMIN ROUTES
-   ====================================================== */
+====================================================== */
 
-// Create product
-router.post("/", adminAuth, createProduct);
+// Approve product
+router.put(
+  "/admin/approve/:id",
+  adminAuth,
+  approveProduct
+);
 
-// Update product
-router.put("/:id", adminAuth, updateProduct);
+// Get pending products
+router.get(
+  "/admin/pending",
+  adminAuth,
+  getPendingProducts
+);
 
-// Low stock products (ADMIN)
+// Update product (admin full control)
+router.put(
+  "/admin/update/:id",
+  adminAuth,
+  updateProduct
+);
+
+// Low stock alert
 router.get(
   "/admin/low-stock",
   adminAuth,

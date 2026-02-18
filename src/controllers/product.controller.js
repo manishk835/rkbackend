@@ -2,10 +2,7 @@
 const Product = require("../models/Product");
 
 /* ======================================================
-   CREATE PRODUCT (ADMIN)
-   ====================================================== */
- /* ======================================================
-   CREATE PRODUCT (ADMIN - PRODUCTION READY)
+   CREATE PRODUCT (SELLER)
 ====================================================== */
 exports.createProduct = async (req, res) => {
   try {
@@ -20,101 +17,45 @@ exports.createProduct = async (req, res) => {
       thumbnail,
       images = [],
       tags = [],
-      isActive = true,
     } = req.body;
-
-    /* ================= BASIC VALIDATION ================= */
 
     if (!title || !price || !category || !thumbnail) {
       return res.status(400).json({
-        message: "Title, price, category and thumbnail are required",
-      });
-    }
-
-    if (price <= 0) {
-      return res.status(400).json({
-        message: "Price must be greater than 0",
+        message: "Title, price, category and thumbnail required",
       });
     }
 
     if (!Array.isArray(variants) || variants.length === 0) {
       return res.status(400).json({
-        message: "At least one variant is required",
+        message: "At least one variant required",
       });
     }
 
-    /* ================= SANITIZE INPUT ================= */
-
-    const cleanTitle = title.trim();
-    const cleanCategory = category.trim().toLowerCase();
-    const cleanSubCategory = subCategory?.trim().toLowerCase();
-    const cleanBrand = brand?.trim().toLowerCase();
-
-    /* ================= SLUG GENERATION ================= */
-
-    const slug = cleanTitle
+    const slug = title
       .toLowerCase()
+      .trim()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+      .replace(/^-+|-+$/g, "");
 
     const slugExists = await Product.findOne({ slug });
-
     if (slugExists) {
       return res.status(400).json({
-        message: "Product with similar title already exists",
+        message: "Product with similar title exists",
       });
     }
-
-    /* ================= SKU VALIDATION ================= */
-
-    const skus = variants.map((v) => v.sku);
-
-    const duplicateSkus = skus.filter(
-      (sku, i) => skus.indexOf(sku) !== i
-    );
-
-    if (duplicateSkus.length > 0) {
-      return res.status(400).json({
-        message: `Duplicate SKU found: ${[
-          ...new Set(duplicateSkus),
-        ].join(", ")}`,
-      });
-    }
-
-    const existingSku = await Product.findOne({
-      "variants.sku": { $in: skus },
-    });
-
-    if (existingSku) {
-      return res.status(400).json({
-        message: "One or more SKUs already exist in another product",
-      });
-    }
-
-    /* ================= VARIANT VALIDATION ================= */
 
     let totalStock = 0;
 
-    const cleanVariants = variants.map((variant) => {
-      if (!variant.size || !variant.color || !variant.sku) {
-        throw new Error("Variant size, color and sku are required");
-      }
-
-      if (variant.stock < 0) {
-        throw new Error("Stock cannot be negative");
-      }
-
-      totalStock += variant.stock || 0;
+    const cleanVariants = variants.map((v) => {
+      totalStock += v.stock || 0;
 
       return {
-        size: variant.size,
-        color: variant.color,
-        sku: variant.sku,
-        stock: variant.stock || 0,
+        size: v.size,
+        color: v.color,
+        sku: v.sku,
+        stock: v.stock || 0,
       };
     });
-
-    /* ================= CREATE PRODUCT ================= */
 
     const product = await Product.create({
       title: cleanTitle,
@@ -130,29 +71,20 @@ exports.createProduct = async (req, res) => {
       images,
       tags,
       isActive,
+      createdBy: req.admin?._id || req.seller?._id,
     });
+    
 
-    /* ================= SAFE RESPONSE ================= */
-
-    return res.status(201).json({
-      message: "Product created successfully",
+    res.status(201).json({
+      message: "Product submitted for approval",
       product,
     });
 
   } catch (err) {
-    console.error("CREATE PRODUCT ERROR:", err);
-
-    if (err.message) {
-      return res.status(400).json({
-        message: err.message,
-      });
-    }
-
-    return res.status(500).json({
-      message: "Product creation failed",
-    });
+    res.status(500).json({ message: err.message });
   }
 };
+
 
   /* ======================================================
    UPDATE PRODUCT (ADMIN)
@@ -226,13 +158,13 @@ exports.createProduct = async (req, res) => {
       if (sort === "az") sortQuery = { title: 1 };
   
       const [products, total] = await Promise.all([
-        Product.find({ isActive: true })
+        Product.find({ isActive: true, isApproved: true })
           .select("-variants.sku") // hide internal SKU
           .sort(sortQuery)
           .skip(skip)
           .limit(Number(limit))
           .lean(),
-        Product.countDocuments({ isActive: true }),
+        Product.countDocuments({ isActive: true, isApproved: true }),
       ]);
   
       return res.json({
@@ -569,7 +501,7 @@ exports.getAllProducts = async (req, res) => {
     /* ================= FILTER DATA ================= */
 
     const brands = await Product.aggregate([
-      { $match: { isActive: true } },
+      { $match: { isActive: true, isApproved: true } },
       {
         $group: {
           _id: "$brand",
@@ -580,7 +512,7 @@ exports.getAllProducts = async (req, res) => {
     ]);
 
     const subCategories = await Product.aggregate([
-      { $match: { isActive: true } },
+      { $match: { isActive: true, isApproved: true } },
       {
         $group: {
           _id: "$subCategory",
@@ -592,7 +524,7 @@ exports.getAllProducts = async (req, res) => {
 
     const sizes = await Product.aggregate([
       { $unwind: "$variants" },
-      { $match: { isActive: true } },
+      { $match: { isActive: true, isApproved: true } },
       {
         $group: {
           _id: "$variants.size",
@@ -604,7 +536,7 @@ exports.getAllProducts = async (req, res) => {
 
     const colors = await Product.aggregate([
       { $unwind: "$variants" },
-      { $match: { isActive: true } },
+      { $match: { isActive: true, isApproved: true } },
       {
         $group: {
           _id: "$variants.color",
@@ -617,7 +549,7 @@ exports.getAllProducts = async (req, res) => {
     const ratings = [5, 4, 3, 2, 1];
 
     const priceAgg = await Product.aggregate([
-      { $match: { isActive: true } },
+      { $match: { isActive: true, isApproved: true } },
       {
         $group: {
           _id: null,
@@ -669,5 +601,60 @@ exports.getLowStockProducts = async (req, res) => {
   } catch (err) {
     console.error("Low stock error", err);
     res.status(500).json([]);
+  }
+};
+
+/* ======================================================
+   APPROVE PRODUCT (ADMIN)
+====================================================== */
+exports.approveProduct = async (req, res) => {
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        isApproved: true,
+        approvedBy: req.user._id,
+        approvedAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    res.json({ message: "Product approved", product });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ======================================================
+   GET MY PRODUCTS (SELLER)
+====================================================== */
+exports.getMyProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      seller: req.user._id,
+    }).sort({ createdAt: -1 });
+
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ======================================================
+   GET PENDING PRODUCTS (ADMIN)
+====================================================== */
+exports.getPendingProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      isApproved: false,
+    }).populate("seller", "name email");
+
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

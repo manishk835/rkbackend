@@ -214,11 +214,33 @@ const productSchema = new mongoose.Schema(
     seoTitle: String,
     seoDescription: String,
 
-    /* ================= META ================= */
-    createdBy: {
+    /* ================= MARKETPLACE ================= */
+
+    seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
       index: true,
+    },
+
+    isApproved: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    approvedAt: Date,
+
+    commissionPercent: {
+      type: Number,
+      default: 10,
+      min: 0,
+      max: 100,
     },
   },
   { timestamps: true }
@@ -271,11 +293,5 @@ productSchema.pre("findOneAndUpdate", function () {
     this.setUpdate(update);
   }
 });
-
-/* ================= GLOBAL SKU UNIQUE INDEX ================= */
-// productSchema.index(
-//   { "variants.sku": 1 },
-//   { unique: true, sparse: true }
-// );
 
 module.exports = mongoose.model("Product", productSchema);
