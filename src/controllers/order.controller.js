@@ -72,7 +72,12 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      if (!product.inStock || product.totalStock < cartItem.quantity) {
+      // if (!product.inStock || product.totalStock < cartItem.quantity) {
+      //   return res.status(400).json({
+      //     message: `${product.title} is out of stock`,
+      //   });
+      // }
+      if (product.totalStock < cartItem.quantity) {
         return res.status(400).json({
           message: `${product.title} is out of stock`,
         });
@@ -89,7 +94,7 @@ exports.createOrder = async (req, res) => {
 
       orderItems.push({
         productId: product._id,
-        seller: product.createdBy,
+        seller: product.seller,
         title: product.title,
         price: product.price,
         quantity: cartItem.quantity,
