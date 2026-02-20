@@ -1,3 +1,4 @@
+// src/middlewares/auth.middleware.js
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
@@ -108,15 +109,6 @@ exports.sellerAuth = async (req, res, next) => {
   }
 };
 
-
-
-/* ======================================================
-   ADMIN SHORTCUT
-====================================================== */
-exports.adminAuth = [
-  exports.protect,
-  exports.requireRole("admin"),
-];
 
 /* ======================================================
    SELLER SHORTCUT

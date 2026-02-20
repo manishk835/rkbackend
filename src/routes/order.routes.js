@@ -15,7 +15,8 @@ const {
   verifyRazorpayPayment,
 } = require("../controllers/order.controller");
 
-const { protect, adminAuth } = require("../middlewares/auth.middleware");
+const { protect } = require("../middlewares/auth.middleware");
+const { adminAuth } = require("../middlewares/admin.middleware");
 
 
 /* ================= USER ROUTES ================= */

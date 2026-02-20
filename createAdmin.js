@@ -1,24 +1,21 @@
-require("dotenv").config();
+// createAdmin.js
+
 const mongoose = require("mongoose");
 const User = require("./src/models/User");
 
-mongoose.connect(process.env.MONGO_URI);
+mongoose.connect("mongodb://localhost:27017/rkbackend");
 
 (async () => {
-  const adminExists = await User.findOne({ role: "admin" });
-
-  if (adminExists) {
-    console.log("Admin already exists");
-    process.exit();
-  }
-
-  await User.create({
-    name: "Super Admin",
-    email: "admin@example.com",
+  const admin = new User({
+    name: "Admin",
+    phone: "9999999999",
+    email: "admin@rkfashion.com",
     password: "Admin@123",
     role: "admin",
+    isVerified: true,
   });
 
-  console.log("Admin created successfully");
+  await admin.save();
+  console.log("Admin created");
   process.exit();
 })();

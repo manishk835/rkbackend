@@ -9,7 +9,7 @@ const {
   updateCategory,
 } = require("../controllers/category.controller");
 
-const { adminAuth } = require("../middlewares/auth.middleware");
+const { adminAuth } = require("../middlewares/admin.middleware")
 
 /* PUBLIC */
 router.get("/", getCategories);
