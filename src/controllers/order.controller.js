@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const PDFDocument = require("pdfkit");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+const Product = require("../models/Product");
 
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
@@ -16,16 +17,26 @@ const razorpay = new Razorpay({
 /* ======================================================
    CREATE ORDER (
 ====================================================== */
-const Product = require("../models/Product");
-
 exports.createOrder = async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
+
     const userId = req.user._id;
     const { customer, items, discount = 0, paymentMethod } = req.body;
 
     /* ================= VALIDATION ================= */
 
-    if (!customer?.name || !customer?.phone || !customer?.address) {
+    if (
+      !customer?.name ||
+      !customer?.phone ||
+      !customer?.address ||
+      !customer?.city ||
+      !customer?.pincode
+    ) {
       return res.status(400).json({
         message: "Customer details incomplete",
       });
@@ -43,7 +54,7 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    /* ================= FETCH PRODUCTS FROM DB ================= */
+    /* ================= FETCH PRODUCTS ================= */
 
     const productIds = items.map((i) => i.productId);
 
@@ -61,6 +72,8 @@ exports.createOrder = async (req, res) => {
     let subtotal = 0;
     const orderItems = [];
 
+    /* ================= PROCESS ITEMS ================= */
+
     for (const cartItem of items) {
       const product = products.find(
         (p) => p._id.toString() === cartItem.productId
@@ -72,11 +85,6 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // if (!product.inStock || product.totalStock < cartItem.quantity) {
-      //   return res.status(400).json({
-      //     message: `${product.title} is out of stock`,
-      //   });
-      // }
       if (product.totalStock < cartItem.quantity) {
         return res.status(400).json({
           message: `${product.title} is out of stock`,
@@ -84,11 +92,11 @@ exports.createOrder = async (req, res) => {
       }
 
       const itemTotal = product.price * cartItem.quantity;
-
       subtotal += itemTotal;
 
       const commissionPercent = 10;
-      const commissionAmount = (itemTotal * commissionPercent) / 100;
+      const commissionAmount =
+        (itemTotal * commissionPercent) / 100;
 
       const sellerEarning = itemTotal - commissionAmount;
 
@@ -102,16 +110,27 @@ exports.createOrder = async (req, res) => {
         sellerEarning,
       });
 
-      // 🔥 REDUCE STOCK
+      /* ===== REDUCE STOCK ===== */
       product.totalStock -= cartItem.quantity;
       await product.save();
     }
 
-    const validDiscount = discount > subtotal ? 0 : discount;
-    const totalAmount = subtotal - validDiscount;
+    /* ================= PRICING ================= */
+
+    const validDiscount =
+      discount > subtotal ? 0 : discount;
+
+    const deliveryFee = subtotal >= 999 ? 0 : 49;
+
+    const totalAmount =
+      subtotal - validDiscount + deliveryFee;
 
     const estimatedDelivery = new Date();
-    estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
+    estimatedDelivery.setDate(
+      estimatedDelivery.getDate() + 5
+    );
+
+    /* ================= CREATE ORDER ================= */
 
     const order = await Order.create({
       user: userId,
@@ -121,6 +140,10 @@ exports.createOrder = async (req, res) => {
       discount: validDiscount,
       totalAmount,
       paymentMethod,
+      paymentStatus:
+        paymentMethod === "COD"
+          ? "PENDING"
+          : "INITIATED",
       status: "Pending",
       estimatedDelivery,
       statusHistory: [
@@ -132,6 +155,7 @@ exports.createOrder = async (req, res) => {
     });
 
     return res.status(201).json(order);
+
   } catch (error) {
     console.error("Create Order Error:", error);
     return res.status(500).json({
@@ -139,6 +163,127 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
+// exports.createOrder = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+//     const { customer, items, discount = 0, paymentMethod } = req.body;
+
+//     /* ================= VALIDATION ================= */
+
+//     if (!customer?.name || !customer?.phone || !customer?.address) {
+//       return res.status(400).json({
+//         message: "Customer details incomplete",
+//       });
+//     }
+
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return res.status(400).json({
+//         message: "Order must contain items",
+//       });
+//     }
+
+//     if (!["COD", "RAZORPAY"].includes(paymentMethod)) {
+//       return res.status(400).json({
+//         message: "Invalid payment method",
+//       });
+//     }
+
+//     /* ================= FETCH PRODUCTS FROM DB ================= */
+
+//     const productIds = items.map((i) => i.productId);
+
+//     const products = await Product.find({
+//       _id: { $in: productIds },
+//       isActive: true,
+//     });
+
+//     if (products.length !== items.length) {
+//       return res.status(400).json({
+//         message: "Some products not available",
+//       });
+//     }
+
+//     let subtotal = 0;
+//     const orderItems = [];
+
+//     for (const cartItem of items) {
+//       const product = products.find(
+//         (p) => p._id.toString() === cartItem.productId
+//       );
+
+//       if (!product) {
+//         return res.status(400).json({
+//           message: "Product not found",
+//         });
+//       }
+
+//       // if (!product.inStock || product.totalStock < cartItem.quantity) {
+//       //   return res.status(400).json({
+//       //     message: `${product.title} is out of stock`,
+//       //   });
+//       // }
+//       if (product.totalStock < cartItem.quantity) {
+//         return res.status(400).json({
+//           message: `${product.title} is out of stock`,
+//         });
+//       }
+
+//       const itemTotal = product.price * cartItem.quantity;
+
+//       subtotal += itemTotal;
+
+//       const commissionPercent = 10;
+//       const commissionAmount = (itemTotal * commissionPercent) / 100;
+
+//       const sellerEarning = itemTotal - commissionAmount;
+
+//       orderItems.push({
+//         productId: product._id,
+//         seller: product.seller,
+//         title: product.title,
+//         price: product.price,
+//         quantity: cartItem.quantity,
+//         commission: commissionPercent,
+//         sellerEarning,
+//       });
+
+//       // 🔥 REDUCE STOCK
+//       product.totalStock -= cartItem.quantity;
+//       await product.save();
+//     }
+
+//     const validDiscount = discount > subtotal ? 0 : discount;
+//     const totalAmount = subtotal - validDiscount;
+
+//     const estimatedDelivery = new Date();
+//     estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
+
+//     const order = await Order.create({
+//       user: userId,
+//       customer,
+//       items: orderItems,
+//       subtotal,
+//       discount: validDiscount,
+//       totalAmount,
+//       paymentMethod,
+//       status: "Pending",
+//       estimatedDelivery,
+//       statusHistory: [
+//         {
+//           status: "Pending",
+//           updatedAt: new Date(),
+//         },
+//       ],
+//     });
+
+//     return res.status(201).json(order);
+//   } catch (error) {
+//     console.error("Create Order Error:", error);
+//     return res.status(500).json({
+//       message: "Order creation failed",
+//     });
+//   }
+// };
 
 /* ======================================================
    USER – GET MY ORDERS
@@ -246,18 +391,17 @@ exports.updateOrderStatus = async (req, res) => {
     /* ===== GIVE LOYALTY POINTS WHEN DELIVERED ===== */
     if (status === "Delivered") {
       const User = require("../models/User");
-    
+
       for (const item of order.items) {
         await User.findByIdAndUpdate(item.seller, {
           $inc: { walletBalance: item.sellerEarning || 0 },
         });
       }
-    
+
       await User.findByIdAndUpdate(order.user, {
         $inc: { loyaltyPoints: order.loyaltyPointsEarned || 0 },
       });
     }
-    
 
     await order.save();
 
