@@ -163,127 +163,6 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
-// exports.createOrder = async (req, res) => {
-//   try {
-//     const userId = req.user._id;
-//     const { customer, items, discount = 0, paymentMethod } = req.body;
-
-//     /* ================= VALIDATION ================= */
-
-//     if (!customer?.name || !customer?.phone || !customer?.address) {
-//       return res.status(400).json({
-//         message: "Customer details incomplete",
-//       });
-//     }
-
-//     if (!Array.isArray(items) || items.length === 0) {
-//       return res.status(400).json({
-//         message: "Order must contain items",
-//       });
-//     }
-
-//     if (!["COD", "RAZORPAY"].includes(paymentMethod)) {
-//       return res.status(400).json({
-//         message: "Invalid payment method",
-//       });
-//     }
-
-//     /* ================= FETCH PRODUCTS FROM DB ================= */
-
-//     const productIds = items.map((i) => i.productId);
-
-//     const products = await Product.find({
-//       _id: { $in: productIds },
-//       isActive: true,
-//     });
-
-//     if (products.length !== items.length) {
-//       return res.status(400).json({
-//         message: "Some products not available",
-//       });
-//     }
-
-//     let subtotal = 0;
-//     const orderItems = [];
-
-//     for (const cartItem of items) {
-//       const product = products.find(
-//         (p) => p._id.toString() === cartItem.productId
-//       );
-
-//       if (!product) {
-//         return res.status(400).json({
-//           message: "Product not found",
-//         });
-//       }
-
-//       // if (!product.inStock || product.totalStock < cartItem.quantity) {
-//       //   return res.status(400).json({
-//       //     message: `${product.title} is out of stock`,
-//       //   });
-//       // }
-//       if (product.totalStock < cartItem.quantity) {
-//         return res.status(400).json({
-//           message: `${product.title} is out of stock`,
-//         });
-//       }
-
-//       const itemTotal = product.price * cartItem.quantity;
-
-//       subtotal += itemTotal;
-
-//       const commissionPercent = 10;
-//       const commissionAmount = (itemTotal * commissionPercent) / 100;
-
-//       const sellerEarning = itemTotal - commissionAmount;
-
-//       orderItems.push({
-//         productId: product._id,
-//         seller: product.seller,
-//         title: product.title,
-//         price: product.price,
-//         quantity: cartItem.quantity,
-//         commission: commissionPercent,
-//         sellerEarning,
-//       });
-
-//       // 🔥 REDUCE STOCK
-//       product.totalStock -= cartItem.quantity;
-//       await product.save();
-//     }
-
-//     const validDiscount = discount > subtotal ? 0 : discount;
-//     const totalAmount = subtotal - validDiscount;
-
-//     const estimatedDelivery = new Date();
-//     estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
-
-//     const order = await Order.create({
-//       user: userId,
-//       customer,
-//       items: orderItems,
-//       subtotal,
-//       discount: validDiscount,
-//       totalAmount,
-//       paymentMethod,
-//       status: "Pending",
-//       estimatedDelivery,
-//       statusHistory: [
-//         {
-//           status: "Pending",
-//           updatedAt: new Date(),
-//         },
-//       ],
-//     });
-
-//     return res.status(201).json(order);
-//   } catch (error) {
-//     console.error("Create Order Error:", error);
-//     return res.status(500).json({
-//       message: "Order creation failed",
-//     });
-//   }
-// };
 
 /* ======================================================
    USER – GET MY ORDERS
@@ -724,3 +603,19 @@ exports.getPaymentAnalytics = async (req, res) => {
     paidOrders,
   });
 };
+
+/* ======================================================
+   SELLER – GET MY ORDERS
+====================================================== */
+// exports.getSellerOrders = async (req, res) => {
+//   try {
+//     const orders = await Order.find({
+//       "items.seller": req.user._id,
+//     })
+//       .sort({ createdAt: -1 });
+
+//     res.json(orders);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
