@@ -159,8 +159,8 @@ exports.createProduct = async (req, res) => {
       if (sort === "az") sortQuery = { title: 1 };
   
       const [products, total] = await Promise.all([
-        Product.find({ isActive: true})
-        // Product.find({ isActive: true, isApproved: true })
+        // Product.find({ isActive: true})
+        Product.find({ isActive: true, isApproved: true })
           .select("-variants.sku") // hide internal SKU
           .sort(sortQuery)
           .skip(skip)
@@ -250,6 +250,7 @@ exports.getProductById = async (req, res) => {
       const filter = {
         category: category.toLowerCase(),
         isActive: true,
+        isApproved: true,
       };
   
       /* ================= SUB CATEGORY ================= */
@@ -457,6 +458,7 @@ exports.getAllProducts = async (req, res) => {
     /* ================= BASE FILTER ================= */
     const filter = {
       isActive: true,
+      isApproved: true,
     };
 
     /* ================= SANITIZE EMPTY PARAMS ================= */
@@ -772,7 +774,7 @@ exports.approveProduct = async (req, res) => {
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       {
-        // isApproved: true,
+        isApproved: true,            // ✅ FIX
         approvedBy: req.user._id,
         approvedAt: new Date(),
       },
@@ -816,5 +818,42 @@ exports.getPendingProducts = async (req, res) => {
     res.json(products);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAllProductsAdmin = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .populate("seller", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch products" });
+  }
+};
+
+exports.deleteProduct = async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ message: "Product deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Delete failed" });
+  }
+};
+
+exports.toggleProductActive = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product)
+      return res.status(404).json({ message: "Not found" });
+
+    product.isActive = !product.isActive;
+    await product.save();
+
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ message: "Update failed" });
   }
 };
