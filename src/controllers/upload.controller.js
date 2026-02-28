@@ -1,28 +1,30 @@
-const cloudinary = require("../config/cloudinary");
+// // // src/controllers/upload.controller.js
 
-exports.uploadImage = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ message: "No file uploaded" });
-    }
+// const cloudinary = require("../config/cloudinary");
 
-    const result = await cloudinary.uploader.upload(
-      req.file.path,
-      {
-        folder: "rk-fashion/products",
-      }
-    );
+// exports.uploadImage = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res
+//         .status(400)
+//         .json({ message: "No file uploaded" });
+//     }
 
-    res.json({
-      url: result.secure_url,
-      publicId: result.public_id,
-    });
-  } catch (err) {
-    console.error("UPLOAD ERROR:", err);
-    res.status(500).json({
-      message: "Image upload failed",
-    });
-  }
-};
+//     const result = await cloudinary.uploader.upload(
+//       req.file.path,
+//       {
+//         folder: "rk-fashion/products",
+//       }
+//     );
+
+//     res.json({
+//       url: result.secure_url,
+//       publicId: result.public_id,
+//     });
+//   } catch (err) {
+//     console.error("UPLOAD ERROR:", err);
+//     res.status(500).json({
+//       message: "Image upload failed",
+//     });
+//   }
+// };

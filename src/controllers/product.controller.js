@@ -4,6 +4,79 @@ const Product = require("../models/Product");
 /* ======================================================
    CREATE PRODUCT (SELLER)
 ====================================================== */
+// exports.createProduct = async (req, res) => {
+//   try {
+//     const {
+//       title,
+//       price,
+//       category,
+//       subCategory,
+//       brand,
+//       description,
+//       variants,
+//       tags,
+//     } = req.body;
+
+//     if (!req.files || req.files.length === 0) {
+//       return res.status(400).json({
+//         message: "At least one product image required",
+//       });
+//     }
+
+//     const slug = title
+//       .toLowerCase()
+//       .trim()
+//       .replace(/[^a-z0-9]+/g, "-")
+//       .replace(/^-+|-+$/g, "");
+
+//     const slugExists = await Product.findOne({ slug });
+//     if (slugExists) {
+//       return res.status(400).json({
+//         message: "Product with similar title exists",
+//       });
+//     }
+
+//     const parsedVariants = JSON.parse(variants);
+
+//     let totalStock = 0;
+//     parsedVariants.forEach((v) => {
+//       totalStock += Number(v.stock) || 0;
+//     });
+
+//     const images = req.files.map((file, index) => ({
+//       url: file.path,
+//       public_id: file.filename,
+//       alt: title,
+//       order: index,
+//     }));
+
+//     const product = await Product.create({
+//       title,
+//       slug,
+//       price,
+//       category: category.toLowerCase(),
+//       subCategory: subCategory?.toLowerCase(),
+//       brand: brand?.toLowerCase(),
+//       description,
+//       variants: parsedVariants,
+//       totalStock,
+//       thumbnail: images[0].url,
+//       images,
+//       tags,
+//       seller: req.user._id,
+//       isApproved: false,
+//     });
+
+//     res.status(201).json({
+//       message: "Product submitted for approval",
+//       product,
+//     });
+//   } catch (err) {
+//     console.error("CREATE PRODUCT ERROR:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
 exports.createProduct = async (req, res) => {
   try {
     const {
@@ -13,21 +86,21 @@ exports.createProduct = async (req, res) => {
       subCategory,
       brand,
       description,
-      variants = [],
+      variants,
+      tags,
+      images,
       thumbnail,
-      images = [],
-      tags = [],
     } = req.body;
 
-    if (!title || !price || !category || !thumbnail) {
+    if (!images || !Array.isArray(images) || images.length === 0) {
       return res.status(400).json({
-        message: "Title, price, category and thumbnail required",
+        message: "At least one product image required",
       });
     }
 
-    if (!Array.isArray(variants) || variants.length === 0) {
+    if (!title || !price || !category || !description) {
       return res.status(400).json({
-        message: "At least one variant required",
+        message: "Required fields missing",
       });
     }
 
@@ -45,48 +118,36 @@ exports.createProduct = async (req, res) => {
     }
 
     let totalStock = 0;
-
-    const cleanVariants = variants.map((v) => {
-      totalStock += v.stock || 0;
-
-      return {
-        size: v.size,
-        color: v.color,
-        sku: v.sku,
-        stock: v.stock || 0,
-      };
+    variants.forEach((v) => {
+      totalStock += Number(v.stock) || 0;
     });
 
     const product = await Product.create({
-      title: cleanTitle,
+      title,
       slug,
       price,
-      category: cleanCategory,
-      subCategory: cleanSubCategory,
-      brand: cleanBrand,
+      category: category.toLowerCase(),
+      subCategory: subCategory?.toLowerCase(),
+      brand: brand?.toLowerCase(),
       description,
-      variants: cleanVariants,
+      variants,
       totalStock,
-      thumbnail,
+      thumbnail: thumbnail || images[0].url,
       images,
       tags,
-      isActive,
-      createdBy: req.admin?._id || req.seller?._id,
-      
+      seller: req.user._id,
+      isApproved: false,
     });
-    
 
     res.status(201).json({
       message: "Product submitted for approval",
       product,
     });
-
   } catch (err) {
+    console.error("CREATE PRODUCT ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 };
-
-
   /* ======================================================
    UPDATE PRODUCT (ADMIN)
    ====================================================== */

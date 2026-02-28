@@ -1,3 +1,5 @@
+// // src/routes/product.routes.js
+
 const express = require("express");
 const router = express.Router();
 
@@ -20,7 +22,7 @@ const {
   searchProducts,
   getProductsByCategory,
 } = require("../controllers/product.controller");
-
+const upload = require("../middlewares/upload.middleware");
 // 🔐 USER AUTH
 const { protect } = require("../middlewares/auth.middleware");
 
@@ -89,9 +91,14 @@ router.get(
   getLowStockProducts
 );
 
+router.post(
+  "/seller/create",
+  protect,
+  upload.array("images", 5), // max 5 images
+  createProduct
+);
 module.exports = router;
 
-// // src/routes/product.routes.js
 
 // const express = require("express");
 // const router = express.Router();

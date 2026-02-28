@@ -1,9 +1,27 @@
 // src/middlewares/upload.middleware.js
 
 const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 
-const storage = multer.memoryStorage();
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "rk-fashion/products",
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+  },
+});
 
 const upload = multer({ storage });
 
 module.exports = upload;
+
+// // src/middlewares/upload.middleware.js
+
+// const multer = require("multer");
+
+// const storage = multer.memoryStorage();
+
+// const upload = multer({ storage });
+
+// module.exports = upload;
