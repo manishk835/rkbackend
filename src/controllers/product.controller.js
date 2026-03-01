@@ -4,78 +4,6 @@ const Product = require("../models/Product");
 /* ======================================================
    CREATE PRODUCT (SELLER)
 ====================================================== */
-// exports.createProduct = async (req, res) => {
-//   try {
-//     const {
-//       title,
-//       price,
-//       category,
-//       subCategory,
-//       brand,
-//       description,
-//       variants,
-//       tags,
-//     } = req.body;
-
-//     if (!req.files || req.files.length === 0) {
-//       return res.status(400).json({
-//         message: "At least one product image required",
-//       });
-//     }
-
-//     const slug = title
-//       .toLowerCase()
-//       .trim()
-//       .replace(/[^a-z0-9]+/g, "-")
-//       .replace(/^-+|-+$/g, "");
-
-//     const slugExists = await Product.findOne({ slug });
-//     if (slugExists) {
-//       return res.status(400).json({
-//         message: "Product with similar title exists",
-//       });
-//     }
-
-//     const parsedVariants = JSON.parse(variants);
-
-//     let totalStock = 0;
-//     parsedVariants.forEach((v) => {
-//       totalStock += Number(v.stock) || 0;
-//     });
-
-//     const images = req.files.map((file, index) => ({
-//       url: file.path,
-//       public_id: file.filename,
-//       alt: title,
-//       order: index,
-//     }));
-
-//     const product = await Product.create({
-//       title,
-//       slug,
-//       price,
-//       category: category.toLowerCase(),
-//       subCategory: subCategory?.toLowerCase(),
-//       brand: brand?.toLowerCase(),
-//       description,
-//       variants: parsedVariants,
-//       totalStock,
-//       thumbnail: images[0].url,
-//       images,
-//       tags,
-//       seller: req.user._id,
-//       isApproved: false,
-//     });
-
-//     res.status(201).json({
-//       message: "Product submitted for approval",
-//       product,
-//     });
-//   } catch (err) {
-//     console.error("CREATE PRODUCT ERROR:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// };
 
 exports.createProduct = async (req, res) => {
   try {
@@ -137,6 +65,9 @@ exports.createProduct = async (req, res) => {
       tags,
       seller: req.user._id,
       isApproved: false,
+      isFeatured,
+      isNewArrival,
+      isBestSeller,
     });
 
     res.status(201).json({
@@ -504,164 +435,9 @@ exports.getProductById = async (req, res) => {
    /* ======================================================
    GET ALL PRODUCTS (WITH FILTERS)
 ====================================================== */
-exports.getAllProducts = async (req, res) => {
-  try {
-    let {
-      sort,
-      brand,
-      size,
-      color,
-      rating,
-      minPrice,
-      maxPrice,
-    } = req.query;
-
-    /* ================= BASE FILTER ================= */
-    const filter = {
-      isActive: true,
-      isApproved: true,
-    };
-
-    /* ================= SANITIZE EMPTY PARAMS ================= */
-
-    if (brand && brand !== "") {
-      filter.brand = { $in: brand.split(",") };
-    }
-
-    if (size && size !== "") {
-      filter["variants.size"] = {
-        $in: size.split(","),
-      };
-    }
-
-    if (color && color !== "") {
-      filter["variants.color"] = {
-        $in: color.split(","),
-      };
-    }
-
-    if (rating && rating !== "") {
-      filter.rating = { $gte: Number(rating) };
-    }
-
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice)
-        filter.price.$gte = Number(minPrice);
-      if (maxPrice)
-        filter.price.$lte = Number(maxPrice);
-    }
-
-    /* ================= SORT ================= */
-
-    let sortQuery = { createdAt: -1 };
-
-    if (sort === "az") sortQuery = { title: 1 };
-    if (sort === "price-low") sortQuery = { price: 1 };
-    if (sort === "price-high") sortQuery = { price: -1 };
-    if (sort === "newest") sortQuery = { createdAt: -1 };
-
-    /* ================= PRODUCTS ================= */
-
-    const products = await Product.find(filter).sort(
-      sortQuery
-    );
-
-    /* ================= FILTER DATA ================= */
-
-    const brands = await Product.aggregate([
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: "$brand",
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const subCategories = await Product.aggregate([
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: "$subCategory",
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const sizes = await Product.aggregate([
-      { $unwind: "$variants" },
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: "$variants.size",
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const colors = await Product.aggregate([
-      { $unwind: "$variants" },
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: "$variants.color",
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const ratings = [5, 4, 3, 2, 1];
-
-    const priceAgg = await Product.aggregate([
-      { $match: { isActive: true } },
-      {
-        $group: {
-          _id: null,
-          minPrice: { $min: "$price" },
-          maxPrice: { $max: "$price" },
-        },
-      },
-    ]);
-
-    return res.json({
-      products,
-      filters: {
-        brands,
-        subCategories,
-        sizes,
-        colors,
-        ratings,
-        priceRange:
-          priceAgg[0] || {
-            minPrice: 0,
-            maxPrice: 0,
-          },
-      },
-    });
-
-  } catch (error) {
-    console.error("Get All Products Error:", error);
-    return res.status(500).json({
-      products: [],
-      filters: {
-        brands: [],
-        subCategories: [],
-        sizes: [],
-        colors: [],
-        ratings: [],
-        priceRange: { minPrice: 0, maxPrice: 0 },
-      },
-    });
-  }
-};
 // exports.getAllProducts = async (req, res) => {
 //   try {
-//     const {
+//     let {
 //       sort,
 //       brand,
 //       size,
@@ -674,25 +450,28 @@ exports.getAllProducts = async (req, res) => {
 //     /* ================= BASE FILTER ================= */
 //     const filter = {
 //       isActive: true,
+//       isApproved: true,
 //     };
 
-//     if (brand) {
+//     /* ================= SANITIZE EMPTY PARAMS ================= */
+
+//     if (brand && brand !== "") {
 //       filter.brand = { $in: brand.split(",") };
 //     }
 
-//     if (size) {
+//     if (size && size !== "") {
 //       filter["variants.size"] = {
 //         $in: size.split(","),
 //       };
 //     }
 
-//     if (color) {
+//     if (color && color !== "") {
 //       filter["variants.color"] = {
 //         $in: color.split(","),
 //       };
 //     }
 
-//     if (rating) {
+//     if (rating && rating !== "") {
 //       filter.rating = { $gte: Number(rating) };
 //     }
 
@@ -705,17 +484,16 @@ exports.getAllProducts = async (req, res) => {
 //     }
 
 //     /* ================= SORT ================= */
+
 //     let sortQuery = { createdAt: -1 };
 
 //     if (sort === "az") sortQuery = { title: 1 };
-//     if (sort === "price-low")
-//       sortQuery = { price: 1 };
-//     if (sort === "price-high")
-//       sortQuery = { price: -1 };
-//     if (sort === "newest")
-//       sortQuery = { createdAt: -1 };
+//     if (sort === "price-low") sortQuery = { price: 1 };
+//     if (sort === "price-high") sortQuery = { price: -1 };
+//     if (sort === "newest") sortQuery = { createdAt: -1 };
 
 //     /* ================= PRODUCTS ================= */
+
 //     const products = await Product.find(filter).sort(
 //       sortQuery
 //     );
@@ -723,7 +501,7 @@ exports.getAllProducts = async (req, res) => {
 //     /* ================= FILTER DATA ================= */
 
 //     const brands = await Product.aggregate([
-//       { $match: { isActive: true, isApproved: true } },
+//       { $match: { isActive: true } },
 //       {
 //         $group: {
 //           _id: "$brand",
@@ -734,7 +512,7 @@ exports.getAllProducts = async (req, res) => {
 //     ]);
 
 //     const subCategories = await Product.aggregate([
-//       { $match: { isActive: true, isApproved: true } },
+//       { $match: { isActive: true } },
 //       {
 //         $group: {
 //           _id: "$subCategory",
@@ -746,7 +524,7 @@ exports.getAllProducts = async (req, res) => {
 
 //     const sizes = await Product.aggregate([
 //       { $unwind: "$variants" },
-//       { $match: { isActive: true, isApproved: true } },
+//       { $match: { isActive: true } },
 //       {
 //         $group: {
 //           _id: "$variants.size",
@@ -758,7 +536,7 @@ exports.getAllProducts = async (req, res) => {
 
 //     const colors = await Product.aggregate([
 //       { $unwind: "$variants" },
-//       { $match: { isActive: true, isApproved: true } },
+//       { $match: { isActive: true } },
 //       {
 //         $group: {
 //           _id: "$variants.color",
@@ -772,7 +550,6 @@ exports.getAllProducts = async (req, res) => {
 
 //     const priceAgg = await Product.aggregate([
 //       { $match: { isActive: true } },
-//       // { $match: { isActive: true, isApproved: true } },
 //       {
 //         $group: {
 //           _id: null,
@@ -797,6 +574,7 @@ exports.getAllProducts = async (req, res) => {
 //           },
 //       },
 //     });
+
 //   } catch (error) {
 //     console.error("Get All Products Error:", error);
 //     return res.status(500).json({
@@ -812,6 +590,158 @@ exports.getAllProducts = async (req, res) => {
 //     });
 //   }
 // };
+exports.getAllProducts = async (req, res) => {
+  try {
+    let {
+      sort,
+      brand,
+      size,
+      color,
+      rating,
+      minPrice,
+      maxPrice,
+      page = 1,
+      limit = 12,
+      filter, // featured | new | best
+    } = req.query;
+
+    page = Number(page) || 1;
+    limit = Number(limit) || 12;
+    const skip = (page - 1) * limit;
+
+    /* ================= BASE FILTER ================= */
+
+    const query = {
+      isActive: true,
+      isApproved: true,
+    };
+
+    /* ================= FEATURE FILTER ================= */
+
+    if (filter === "featured") query.isFeatured = true;
+    if (filter === "new") query.isNewArrival = true;
+    if (filter === "best") query.isBestSeller = true;
+
+    /* ================= BRAND ================= */
+
+    if (brand) {
+      query.brand = { $in: brand.split(",") };
+    }
+
+    /* ================= SIZE ================= */
+
+    if (size) {
+      query["variants.size"] = { $in: size.split(",") };
+    }
+
+    /* ================= COLOR ================= */
+
+    if (color) {
+      query["variants.color"] = { $in: color.split(",") };
+    }
+
+    /* ================= RATING ================= */
+
+    if (rating) {
+      query.rating = { $gte: Number(rating) };
+    }
+
+    /* ================= PRICE ================= */
+
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+    }
+
+    /* ================= SORT ================= */
+
+    let sortQuery = { createdAt: -1 };
+
+    if (sort === "az") sortQuery = { title: 1 };
+    if (sort === "price-low") sortQuery = { price: 1 };
+    if (sort === "price-high") sortQuery = { price: -1 };
+    if (sort === "rating") sortQuery = { rating: -1 };
+
+    /* ================= FETCH ================= */
+
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .select("-variants.sku")
+        .sort(sortQuery)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Product.countDocuments(query),
+    ]);
+
+    /* ================= FILTER DATA ================= */
+
+    const baseMatch = {
+      isActive: true,
+      isApproved: true,
+    };
+
+    const brands = await Product.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: "$brand", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const sizes = await Product.aggregate([
+      { $match: baseMatch },
+      { $unwind: "$variants" },
+      { $group: { _id: "$variants.size", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const colors = await Product.aggregate([
+      { $match: baseMatch },
+      { $unwind: "$variants" },
+      { $group: { _id: "$variants.color", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const priceAgg = await Product.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$price" },
+          maxPrice: { $max: "$price" },
+        },
+      },
+    ]);
+
+    return res.json({
+      products,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      filters: {
+        brands,
+        sizes,
+        colors,
+        ratings: [5, 4, 3, 2, 1],
+        priceRange:
+          priceAgg[0] || {
+            minPrice: 0,
+            maxPrice: 0,
+          },
+      },
+    });
+
+  } catch (error) {
+    console.error("Get All Products Error:", error);
+    return res.status(500).json({
+      products: [],
+      total: 0,
+      filters: {},
+    });
+  }
+};
+
 
 exports.getLowStockProducts = async (req, res) => {
   try {

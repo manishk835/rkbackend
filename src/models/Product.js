@@ -38,14 +38,7 @@ const variantSchema = new mongoose.Schema(
 );
 
 /* ================= IMAGE SCHEMA ================= */
-// const imageSchema = new mongoose.Schema(
-//   {
-//     url: { type: String, required: true, trim: true },
-//     alt: { type: String, trim: true },
-//     order: { type: Number, default: 0 },
-//   },
-//   { _id: false }
-// );
+
 const imageSchema = new mongoose.Schema(
   {
     url: { type: String, required: true },
