@@ -18,6 +18,9 @@ exports.createProduct = async (req, res) => {
       tags,
       images,
       thumbnail,
+      isFeatured,
+      isNewArrival,
+      isBestSeller,
     } = req.body;
 
     if (!images || !Array.isArray(images) || images.length === 0) {
