@@ -295,4 +295,20 @@ productSchema.pre("findOneAndUpdate", function () {
   }
 });
 
+const VendorApplicationSchema = new mongoose.Schema(
+  {
+    businessName: String,
+    email: String,
+    phone: String,
+    category: String,
+    message: String,
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+  },
+  { timestamps: true }
+);
+
 module.exports = mongoose.model("Product", productSchema);

@@ -1,3 +1,5 @@
+// seller.middleware.js
+
 const User = require("../models/User");
 
 exports.sellerOnly = async (req, res, next) => {
