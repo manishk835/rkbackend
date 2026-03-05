@@ -1,23 +1,27 @@
-// seller.controller.js
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 
 /* ================= SELLER PRODUCTS ================= */
+
 exports.getSellerProducts = async (req, res) => {
   try {
+
     const products = await Product.find({
       seller: req.seller._id,
     }).sort({ createdAt: -1 });
 
     res.json(products);
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 /* ================= SELLER ORDERS ================= */
+
 exports.getSellerOrders = async (req, res) => {
   try {
+
     const sellerId = req.seller._id;
 
     const orders = await Order.find({
@@ -27,12 +31,16 @@ exports.getSellerOrders = async (req, res) => {
       .lean();
 
     const filteredOrders = orders.map(order => {
+
       const sellerItems = order.items.filter(
-        item => item.seller.toString() === sellerId.toString()
+        item =>
+          item.seller.toString() ===
+          sellerId.toString()
       );
 
       const sellerTotal = sellerItems.reduce(
-        (sum, item) => sum + item.sellerEarning,
+        (sum, item) =>
+          sum + item.sellerEarning,
         0
       );
 
@@ -55,55 +63,54 @@ exports.getSellerOrders = async (req, res) => {
 };
 
 /* ================= SELLER DASHBOARD ================= */
+
 exports.getSellerDashboard = async (req, res) => {
   try {
+
     const sellerId = req.seller._id;
 
-    const totalProducts = await Product.countDocuments({
-      seller: sellerId,
-    });
+    const totalProducts =
+      await Product.countDocuments({
+        seller: sellerId,
+      });
 
-    const lowStockProducts = await Product.countDocuments({
-      seller: sellerId,
-      totalStock: { $lt: 5 },
-    });
+    const lowStockProducts =
+      await Product.countDocuments({
+        seller: sellerId,
+        totalStock: { $lt: 5 },
+      });
 
-    const totalOrders = await Order.countDocuments({
-      "items.seller": sellerId,
-    });
+    const totalOrders =
+      await Order.countDocuments({
+        "items.seller": sellerId,
+      });
 
-    const pendingOrders = await Order.countDocuments({
-      "items.seller": sellerId,
-      status: { $in: ["Pending", "Confirmed", "Packed"] },
-    });
+    const pendingOrders =
+      await Order.countDocuments({
+        "items.seller": sellerId,
+        status: {
+          $in: [
+            "Pending",
+            "Confirmed",
+            "Packed",
+          ],
+        },
+      });
 
     const revenue = await Order.aggregate([
       { $match: { status: "Delivered" } },
       { $unwind: "$items" },
-      { $match: { "items.seller": sellerId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$items.sellerEarning" },
-        },
-      },
-    ]);
-
-    const monthlyRevenue = await Order.aggregate([
       {
         $match: {
-          status: "Delivered",
-          createdAt: {
-            $gte: new Date(new Date().setDate(1)),
-          },
+          "items.seller": sellerId,
         },
       },
-      { $unwind: "$items" },
-      { $match: { "items.seller": sellerId } },
       {
         $group: {
           _id: null,
-          total: { $sum: "$items.sellerEarning" },
+          total: {
+            $sum: "$items.sellerEarning",
+          },
         },
       },
     ]);
@@ -114,7 +121,6 @@ exports.getSellerDashboard = async (req, res) => {
       pendingOrders,
       lowStockProducts,
       totalRevenue: revenue[0]?.total || 0,
-      monthlyRevenue: monthlyRevenue[0]?.total || 0,
       walletBalance: req.seller.walletBalance || 0,
     });
 
@@ -123,19 +129,62 @@ exports.getSellerDashboard = async (req, res) => {
   }
 };
 
-exports.applyVendor = async (req, res) => {
-  const { businessName, email, phone, category, message } = req.body;
+/* ================= UPDATE SELLER PRODUCT ================= */
 
-  const application = await VendorApplication.create({
-    businessName,
-    email,
-    phone,
-    category,
-    message,
-    status: "pending",
-  });
+exports.updateSellerProduct = async (req, res) => {
+  try {
 
-  res.status(201).json({
-    message: "Application submitted",
-  });
+    const product = await Product.findOne({
+      _id: req.params.id,
+      seller: req.seller._id,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
+    }
+
+    Object.assign(product, req.body);
+
+    product.isApproved = false;
+
+    await product.save();
+
+    res.json({
+      message:
+        "Product updated. Waiting for admin approval.",
+      product,
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ================= DELETE SELLER PRODUCT ================= */
+
+exports.deleteSellerProduct = async (req, res) => {
+  try {
+
+    const product = await Product.findOne({
+      _id: req.params.id,
+      seller: req.seller._id,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
+    }
+
+    await product.deleteOne();
+
+    res.json({
+      message: "Product deleted successfully",
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };

@@ -1,6 +1,6 @@
-// src/models/order.js
-
 const mongoose = require("mongoose");
+
+/* ================= ORDER STATUS ================= */
 
 const allowedStatuses = [
   "Pending",
@@ -11,7 +11,7 @@ const allowedStatuses = [
   "Cancelled",
 ];
 
-/* ================= ITEM SUB-SCHEMA ================= */
+/* ================= ORDER ITEM ================= */
 
 const OrderItemSchema = new mongoose.Schema(
   {
@@ -19,13 +19,13 @@ const OrderItemSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       required: true,
+      index: true,
     },
 
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      // index: true,
     },
 
     title: {
@@ -50,6 +50,7 @@ const OrderItemSchema = new mongoose.Schema(
       type: Number,
       default: 10, // %
       min: 0,
+      max: 100,
     },
 
     sellerEarning: {
@@ -61,11 +62,12 @@ const OrderItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ================= MAIN ORDER SCHEMA ================= */
+/* ================= MAIN ORDER ================= */
 
 const OrderSchema = new mongoose.Schema(
   {
     /* ================= USER ================= */
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -74,22 +76,45 @@ const OrderSchema = new mongoose.Schema(
     },
 
     /* ================= ITEMS ================= */
+
     items: {
       type: [OrderItemSchema],
       required: true,
-      validate: [(val) => val.length > 0, "Order must have items"],
+      validate: [(v) => v.length > 0, "Order must have items"],
     },
 
     /* ================= CUSTOMER ================= */
+
     customer: {
-      name: { type: String, required: true, trim: true },
-      phone: { type: String, required: true },
-      address: { type: String, required: true },
-      city: { type: String, required: true },
-      pincode: { type: String, required: true },
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+
+      phone: {
+        type: String,
+        required: true,
+      },
+
+      address: {
+        type: String,
+        required: true,
+      },
+
+      city: {
+        type: String,
+        required: true,
+      },
+
+      pincode: {
+        type: String,
+        required: true,
+      },
     },
 
     /* ================= PRICING ================= */
+
     subtotal: {
       type: Number,
       required: true,
@@ -126,6 +151,7 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       enum: ["PENDING", "INITIATED", "PAID", "FAILED"],
       default: "PENDING",
+      index: true,
     },
 
     /* ================= ORDER STATUS ================= */
@@ -142,6 +168,7 @@ const OrderSchema = new mongoose.Schema(
           type: String,
           enum: allowedStatuses,
         },
+
         updatedAt: {
           type: Date,
           default: Date.now,
@@ -168,6 +195,7 @@ const OrderSchema = new mongoose.Schema(
       {
         event: String,
         payload: Object,
+
         createdAt: {
           type: Date,
           default: Date.now,
@@ -179,17 +207,17 @@ const OrderSchema = new mongoose.Schema(
 );
 
 /* ================= INDEXES ================= */
+
 OrderSchema.index({ "items.seller": 1 });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ status: 1 });
-/* ================= AUTO COMMISSION CALC ================= */
+
+/* ================= AUTO COMMISSION ================= */
 
 OrderSchema.pre("save", function () {
   let totalCommission = 0;
 
-  if (!this.items || this.items.length === 0) {
-    return;
-  }
+  if (!this.items || this.items.length === 0) return;
 
   this.items.forEach((item) => {
     const itemTotal = item.price * item.quantity;
@@ -205,7 +233,18 @@ OrderSchema.pre("save", function () {
   this.platformCommission = totalCommission;
 });
 
-/* ================= SAFE MODEL EXPORT ================= */
+/* ================= STATUS HISTORY ================= */
+
+OrderSchema.pre("save", function () {
+  if (this.isModified("status")) {
+    this.statusHistory.push({
+      status: this.status,
+      updatedAt: new Date(),
+    });
+  }
+});
+
+/* ================= EXPORT ================= */
 
 module.exports =
   mongoose.models.Order ||

@@ -100,9 +100,11 @@ app.use("/api/wishlist", require("./routes/wishlist.routes"));
 app.use("/api/upload", require("./routes/upload.routes"));
 app.use("/api/address", require("./routes/address.routes"));
 app.use("/api/seller", require("./routes/seller.routes"));
+app.use("/api/vendors", require("./routes/vendor.routes")); // ✅ ADD HERE
 app.use("/api/categories", require("./routes/category.routes"));
 app.use("/api/webhook", require("./routes/webhook.routes"));
-
+app.use("/api/coupons", require("./routes/coupon.routes"));
+app.use("/api/withdrawals", require("./routes/withdrawal.routes"));
 /* ======================================================
    404 HANDLER
 ====================================================== */

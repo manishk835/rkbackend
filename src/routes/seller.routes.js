@@ -1,19 +1,56 @@
 const express = require("express");
 const router = express.Router();
 
-const { sellerAuth } = require("../middlewares/auth.middleware");
-const { sellerOnly } = require("../middlewares/seller.middleware");
-
 const {
   getSellerProducts,
   getSellerOrders,
   getSellerDashboard,
+  updateSellerProduct,
+  deleteSellerProduct,
 } = require("../controllers/seller.controller");
 
-/* ================= SELLER ROUTES ================= */
+const { sellerAuth } = require("../middlewares/auth.middleware");
+const { sellerOnly } = require("../middlewares/seller.middleware");
 
-router.get("/products", sellerAuth, sellerOnly, getSellerProducts);
-router.get("/orders", sellerAuth, sellerOnly, getSellerOrders);
-router.get("/dashboard", sellerAuth, sellerOnly, getSellerDashboard);
+/* ================= SELLER DASHBOARD ================= */
+
+router.get(
+  "/dashboard",
+  sellerAuth,
+  sellerOnly,
+  getSellerDashboard
+);
+
+/* ================= SELLER PRODUCTS ================= */
+
+router.get(
+  "/products",
+  sellerAuth,
+  sellerOnly,
+  getSellerProducts
+);
+
+router.put(
+  "/products/:id",
+  sellerAuth,
+  sellerOnly,
+  updateSellerProduct
+);
+
+router.delete(
+  "/products/:id",
+  sellerAuth,
+  sellerOnly,
+  deleteSellerProduct
+);
+
+/* ================= SELLER ORDERS ================= */
+
+router.get(
+  "/orders",
+  sellerAuth,
+  sellerOnly,
+  getSellerOrders
+);
 
 module.exports = router;

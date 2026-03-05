@@ -67,6 +67,7 @@ exports.createProduct = async (req, res) => {
       images,
       tags,
       seller: req.user._id,
+      // seller: req.user.id,
       isApproved: false,
       isFeatured,
       isNewArrival,
@@ -765,10 +766,17 @@ exports.getLowStockProducts = async (req, res) => {
 ====================================================== */
 exports.approveProduct = async (req, res) => {
   try {
+
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Admin only",
+      });
+    }
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       {
-        isApproved: true,            // ✅ FIX
+        isApproved: true,
         approvedBy: req.user._id,
         approvedAt: new Date(),
       },
@@ -776,14 +784,43 @@ exports.approveProduct = async (req, res) => {
     );
 
     if (!product) {
-      return res.status(404).json({ message: "Not found" });
+      return res.status(404).json({
+        message: "Product not found",
+      });
     }
 
-    res.json({ message: "Product approved", product });
+    res.json({
+      message: "Product approved",
+      product,
+    });
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({
+      message: err.message,
+    });
   }
 };
+// exports.approveProduct = async (req, res) => {
+//   try {
+//     const product = await Product.findByIdAndUpdate(
+//       req.params.id,
+//       {
+//         isApproved: true,            // ✅ FIX
+//         approvedBy: req.user._id,
+//         approvedAt: new Date(),
+//       },
+//       { new: true }
+//     );
+
+//     if (!product) {
+//       return res.status(404).json({ message: "Not found" });
+//     }
+
+//     res.json({ message: "Product approved", product });
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 
 /* ======================================================
    GET MY PRODUCTS (SELLER)
