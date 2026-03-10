@@ -3,538 +3,636 @@ const mongoose = require("mongoose");
 /* ================= VARIANT ================= */
 
 const variantSchema = new mongoose.Schema(
-  {
-    size: { type: String, required: true, trim: true },
-    color: { type: String, required: true, trim: true },
-
-    stock: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    sku: {
-      type: String,
-      required: true,
-      uppercase: true,
-      trim: true,
-    },
-
-    priceOverride: Number,
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+{
+  size: {
+    type: String,
+    required: true,
+    trim: true,
   },
-  { _id: false }
+
+  color: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+
+  stock: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  sku: {
+    type: String,
+    required: true,
+    uppercase: true,
+    trim: true,
+  },
+
+  priceOverride: {
+    type: Number,
+    min: 0,
+  },
+
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+},
+{ _id: false }
 );
 
 /* ================= IMAGE ================= */
 
 const imageSchema = new mongoose.Schema(
-  {
-    url: { type: String, required: true },
-    public_id: { type: String, required: true },
-    alt: String,
-    order: Number,
+{
+  url: {
+    type: String,
+    required: true,
   },
-  { _id: false }
+
+  public_id: {
+    type: String,
+    required: true,
+  },
+
+  alt: String,
+
+  order: {
+    type: Number,
+    default: 0,
+  },
+},
+{ _id: false }
 );
 
 /* ================= PRODUCT ================= */
 
 const productSchema = new mongoose.Schema(
-  {
-    title: {
+{
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 200,
+    index: "text",
+  },
+
+  slug: {
+    type: String,
+    required: true,
+    lowercase: true,
+    index: true,
+  },
+
+  brand: {
+    type: String,
+    lowercase: true,
+    trim: true,
+    index: true,
+  },
+
+  description: {
+    type: String,
+    required: true,
+  },
+
+  shortDescription: {
+    type: String,
+    maxlength: 300,
+  },
+
+  category: {
+    type: String,
+    required: true,
+    lowercase: true,
+    index: true,
+  },
+
+  subCategory: {
+    type: String,
+    lowercase: true,
+    index: true,
+  },
+
+  tags: [
+    {
       type: String,
-      required: true,
+      lowercase: true,
       trim: true,
-      maxlength: 200,
-    },
-
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
       index: true,
     },
+  ],
 
-    brand: {
-      type: String,
-      lowercase: true,
-      trim: true,
-      index: true,
-    },
+  /* ================= PRICING ================= */
 
-    description: {
-      type: String,
-      required: true,
-    },
+  price: {
+    type: Number,
+    required: true,
+    min: 0,
+    index: true,
+  },
 
-    shortDescription: String,
+  originalPrice: {
+    type: Number,
+    min: 0,
+  },
 
-    category: {
-      type: String,
-      required: true,
-      lowercase: true,
-      index: true,
-    },
+  discountPercent: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100,
+  },
 
-    subCategory: {
-      type: String,
-      lowercase: true,
-      index: true,
-    },
+  currency: {
+    type: String,
+    default: "INR",
+  },
 
-    tags: [String],
+  /* ================= MEDIA ================= */
 
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-      index: true,
-    },
+  thumbnail: {
+    type: String,
+    required: true,
+  },
 
-    originalPrice: Number,
+  images: [imageSchema],
 
-    discountPercent: {
-      type: Number,
-      default: 0,
-    },
+  /* ================= VARIANTS ================= */
 
-    currency: {
-      type: String,
-      default: "INR",
-    },
-
-    thumbnail: {
-      type: String,
-      required: true,
-    },
-
-    images: [imageSchema],
-
-    variants: {
-      type: [variantSchema],
-      validate: {
-        validator: (v) => v.length > 0,
-        message: "Product must have variants",
-      },
-    },
-
-    totalStock: {
-      type: Number,
-      default: 0,
-      index: true,
-    },
-
-    inStock: {
-      type: Boolean,
-      default: true,
-    },
-
-    rating: {
-      type: Number,
-      default: 0,
-    },
-
-    reviewsCount: {
-      type: Number,
-      default: 0,
-    },
-
-    isFeatured: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isNewArrival: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isBestSeller: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
-    },
-
-    seller: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
-
-    isApproved: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    approvedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-
-    approvedAt: Date,
-
-    commissionPercent: {
-      type: Number,
-      default: 10,
+  variants: {
+    type: [variantSchema],
+    validate: {
+      validator: (v) => v.length > 0,
+      message: "Product must have at least one variant",
     },
   },
-  { timestamps: true }
+
+  /* ================= STOCK ================= */
+
+  totalStock: {
+    type: Number,
+    default: 0,
+    index: true,
+  },
+
+  inStock: {
+    type: Boolean,
+    default: true,
+  },
+
+  /* ================= REVIEWS ================= */
+
+  rating: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5,
+    index: true,
+  },
+
+  reviewsCount: {
+    type: Number,
+    default: 0,
+  },
+
+  /* ================= FLAGS ================= */
+
+  isFeatured: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  isNewArrival: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  isBestSeller: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  isActive: {
+    type: Boolean,
+    default: true,
+    index: true,
+  },
+
+  /* ================= SELLER ================= */
+
+  seller: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true,
+  },
+
+  /* ================= APPROVAL ================= */
+
+  isApproved: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+
+  approvedAt: Date,
+
+  /* ================= COMMISSION ================= */
+
+  commissionPercent: {
+    type: Number,
+    default: 10,
+    min: 0,
+    max: 100,
+  },
+
+  /* ================= ANALYTICS ================= */
+
+  views: {
+    type: Number,
+    default: 0,
+  },
+
+  purchases: {
+    type: Number,
+    default: 0,
+  },
+
+},
+{ timestamps: true }
 );
+
+/* ================= INDEXES ================= */
+
+productSchema.index({ seller: 1 });
+productSchema.index({ category: 1 });
+productSchema.index({ price: 1 });
+productSchema.index({ isActive: 1, isApproved: 1 });
+productSchema.index({ title: "text", description: "text" });
 
 /* ================= AUTO SLUG ================= */
 
 productSchema.pre("validate", function () {
+
   if (!this.slug && this.title) {
-    this.slug = this.title
+
+    const baseSlug = this.title
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
+
+    this.slug = `${baseSlug}-${Date.now()}`;
+
   }
+
 });
 
 /* ================= STOCK CALC ================= */
 
 productSchema.pre("save", function () {
+
   if (this.variants) {
+
     this.totalStock = this.variants.reduce(
       (sum, v) => sum + (Number(v.stock) || 0),
       0
     );
 
     this.inStock = this.totalStock > 0;
+
   }
+
 });
 
-module.exports = mongoose.model("Product", productSchema);
+/* ================= PRICE VALIDATION ================= */
 
-// // src/models/Product.js
+productSchema.pre("save", function (next) {
+
+  if (this.originalPrice && this.price > this.originalPrice) {
+    return next(new Error("Price cannot exceed original price"));
+  }
+
+  next();
+
+});
+
+module.exports =
+  mongoose.models.Product ||
+  mongoose.model("Product", productSchema);
+
+// // // src/models/Product.js
+
 // const mongoose = require("mongoose");
 
-// /* ================= VARIANT SCHEMA ================= */
+// /* ================= VARIANT ================= */
+
 // const variantSchema = new mongoose.Schema(
-//   {
-//     size: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//     },
-//     color: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//     },
-//     stock: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//     },
-//     sku: {
-//       type: String,
-//       required: true,
-//       uppercase: true,
-//       trim: true,
-//     },
-//     priceOverride: {
-//       type: Number,
-//       min: 0,
-//     },
-//     isActive: {
-//       type: Boolean,
-//       default: true,
-//     },
+// {
+//   size: {
+//     type: String,
+//     required: true,
+//     trim: true,
 //   },
-//   { _id: false }
+
+//   color: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//   },
+
+//   stock: {
+//     type: Number,
+//     default: 0,
+//     min: 0,
+//   },
+
+//   sku: {
+//     type: String,
+//     required: true,
+//     uppercase: true,
+//     trim: true,
+//   },
+
+//   priceOverride: {
+//     type: Number,
+//     min: 0,
+//   },
+
+//   isActive: {
+//     type: Boolean,
+//     default: true,
+//   },
+// },
+// { _id: false }
 // );
 
-// /* ================= IMAGE SCHEMA ================= */
+// /* ================= IMAGE ================= */
 
 // const imageSchema = new mongoose.Schema(
-//   {
-//     url: { type: String, required: true },
-//     public_id: { type: String, required: true }, // ADD
-//     alt: { type: String },
-//     order: { type: Number, default: 0 },
+// {
+//   url: {
+//     type: String,
+//     required: true,
 //   },
-//   { _id: false }
+
+//   public_id: {
+//     type: String,
+//     required: true,
+//   },
+
+//   alt: String,
+
+//   order: {
+//     type: Number,
+//     default: 0,
+//   },
+// },
+// { _id: false }
 // );
-// /* ================= PRODUCT SCHEMA ================= */
+
+// /* ================= PRODUCT ================= */
+
 // const productSchema = new mongoose.Schema(
-//   {
-//     /* ================= BASIC ================= */
-//     title: {
+// {
+//   title: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//     maxlength: 200,
+//   },
+
+//   slug: {
+//     type: String,
+//     required: true,
+//     unique: true,
+//     lowercase: true,
+//     index: true,
+//   },
+
+//   brand: {
+//     type: String,
+//     lowercase: true,
+//     trim: true,
+//     index: true,
+//   },
+
+//   description: {
+//     type: String,
+//     required: true,
+//   },
+
+//   shortDescription: {
+//     type: String,
+//     maxlength: 300,
+//   },
+
+//   category: {
+//     type: String,
+//     required: true,
+//     lowercase: true,
+//     index: true,
+//   },
+
+//   subCategory: {
+//     type: String,
+//     lowercase: true,
+//     index: true,
+//   },
+
+//   tags: [
+//     {
 //       type: String,
-//       required: true,
+//       lowercase: true,
 //       trim: true,
-//       maxlength: 200,
 //     },
+//   ],
 
-//     slug: {
-//       type: String,
-//       required: true,
-//       unique: true,
-//       lowercase: true,
-//       index: true,
-//     },
+//   /* ================= PRICING ================= */
 
-//     brand: {
-//       type: String,
-//       trim: true,
-//       lowercase: true,
-//       index: true,
-//     },
+//   price: {
+//     type: Number,
+//     required: true,
+//     min: 0,
+//     index: true,
+//   },
 
-//     shortDescription: {
-//       type: String,
-//       maxlength: 300,
-//     },
+//   originalPrice: {
+//     type: Number,
+//     min: 0,
+//   },
 
-//     description: {
-//       type: String,
-//       required: true,
-//     },
+//   discountPercent: {
+//     type: Number,
+//     default: 0,
+//     min: 0,
+//     max: 100,
+//   },
 
-//     /* ================= CATEGORY ================= */
-//     category: {
-//       type: String,
-//       required: true,
-//       lowercase: true,
-//       index: true,
-//     },
+//   currency: {
+//     type: String,
+//     default: "INR",
+//   },
 
-//     subCategory: {
-//       type: String,
-//       lowercase: true,
-//       index: true,
-//     },
+//   /* ================= MEDIA ================= */
 
-//     tags: {
-//       type: [String],
-//       index: true,
-//     },
+//   thumbnail: {
+//     type: String,
+//     required: true,
+//   },
 
-//     /* ================= PRICING ================= */
-//     price: {
-//       type: Number,
-//       required: true,
-//       min: 0,
-//       index: true,
-//     },
+//   images: [imageSchema],
 
-//     originalPrice: {
-//       type: Number,
-//       min: 0,
-//     },
+//   /* ================= VARIANTS ================= */
 
-//     discountPercent: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//       max: 100,
-//     },
-
-//     currency: {
-//       type: String,
-//       default: "INR",
-//     },
-
-//     taxInclusive: {
-//       type: Boolean,
-//       default: true,
-//     },
-
-//     /* ================= IMAGES ================= */
-//     thumbnail: {
-//       type: String,
-//       required: true,
-//     },
-
-//     images: [imageSchema],
-
-//     /* ================= VARIANTS ================= */
-//     variants: {
-//       type: [variantSchema],
-//       validate: {
-//         validator: function (v) {
-//           return v && v.length > 0;
-//         },
-//         message: "At least one variant required",
-//       },
-//     },
-
-//     /* ================= STOCK ================= */
-//     totalStock: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//       index: true,
-//     },
-
-//     inStock: {
-//       type: Boolean,
-//       default: true,
-//       index: true,
-//     },
-
-//     maxOrderQty: {
-//       type: Number,
-//       default: 5,
-//       min: 1,
-//     },
-
-//     /* ================= RATINGS ================= */
-//     rating: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//       max: 5,
-//       index: true,
-//     },
-
-//     reviewsCount: {
-//       type: Number,
-//       default: 0,
-//     },
-
-//     /* ================= FLAGS ================= */
-//     isFeatured: {
-//       type: Boolean,
-//       default: false,
-//       index: true,
-//     },
-
-//     isNewArrival: {
-//       type: Boolean,
-//       default: false,
-//       index: true,
-//     },
-
-//     isBestSeller: {
-//       type: Boolean,
-//       default: false,
-//       index: true,
-//     },
-
-//     isActive: {
-//       type: Boolean,
-//       default: true,
-//       index: true,
-//     },
-
-//     /* ================= SEO ================= */
-//     seoTitle: String,
-//     seoDescription: String,
-
-//     /* ================= MARKETPLACE ================= */
-
-//     seller: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "User",
-//       required: true,
-//       index: true,
-//     },
-
-//     isApproved: {
-//       type: Boolean,
-//       default: false,
-//       index: true,
-//     },
-
-//     approvedBy: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "User",
-//     },
-
-//     approvedAt: Date,
-
-//     commissionPercent: {
-//       type: Number,
-//       default: 10,
-//       min: 0,
-//       max: 100,
+//   variants: {
+//     type: [variantSchema],
+//     validate: {
+//       validator: (v) => v.length > 0,
+//       message: "Product must have at least one variant",
 //     },
 //   },
-//   { timestamps: true }
+
+//   /* ================= STOCK ================= */
+
+//   totalStock: {
+//     type: Number,
+//     default: 0,
+//     index: true,
+//   },
+
+//   inStock: {
+//     type: Boolean,
+//     default: true,
+//   },
+
+//   /* ================= REVIEWS ================= */
+
+//   rating: {
+//     type: Number,
+//     default: 0,
+//     min: 0,
+//     max: 5,
+//   },
+
+//   reviewsCount: {
+//     type: Number,
+//     default: 0,
+//   },
+
+//   /* ================= FLAGS ================= */
+
+//   isFeatured: {
+//     type: Boolean,
+//     default: false,
+//     index: true,
+//   },
+
+//   isNewArrival: {
+//     type: Boolean,
+//     default: false,
+//     index: true,
+//   },
+
+//   isBestSeller: {
+//     type: Boolean,
+//     default: false,
+//     index: true,
+//   },
+
+//   isActive: {
+//     type: Boolean,
+//     default: true,
+//     index: true,
+//   },
+
+//   /* ================= SELLER ================= */
+
+//   seller: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: "User",
+//     required: true,
+//     index: true,
+//   },
+
+//   /* ================= APPROVAL ================= */
+
+//   isApproved: {
+//     type: Boolean,
+//     default: false,
+//     index: true,
+//   },
+
+//   approvedBy: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: "User",
+//   },
+
+//   approvedAt: Date,
+
+//   /* ================= COMMISSION ================= */
+
+//   commissionPercent: {
+//     type: Number,
+//     default: 10,
+//     min: 0,
+//     max: 100,
+//   },
+
+// },
+// { timestamps: true }
 // );
 
-// /* ================= TEXT SEARCH INDEX ================= */
-// productSchema.index({
-//   title: "text",
-//   brand: "text",
-//   category: "text",
-//   subCategory: "text",
-//   tags: "text",
-// });
+// /* ================= INDEXES ================= */
+
+// productSchema.index({ seller: 1 });
+// productSchema.index({ category: 1 });
+// productSchema.index({ price: 1 });
+// productSchema.index({ isActive: 1, isApproved: 1 });
 
 // /* ================= AUTO SLUG ================= */
+
 // productSchema.pre("validate", function () {
+
 //   if (!this.slug && this.title) {
+
 //     this.slug = this.title
 //       .toLowerCase()
 //       .trim()
 //       .replace(/[^a-z0-9]+/g, "-")
 //       .replace(/^-+|-+$/g, "");
+
 //   }
+
 // });
 
-// /* ================= AUTO STOCK CALC ================= */
+// /* ================= STOCK CALC ================= */
+
 // productSchema.pre("save", function () {
-//   if (Array.isArray(this.variants)) {
+
+//   if (this.variants) {
+
 //     this.totalStock = this.variants.reduce(
 //       (sum, v) => sum + (Number(v.stock) || 0),
 //       0
 //     );
+
 //     this.inStock = this.totalStock > 0;
+
 //   }
+
 // });
 
-// /* ================= AUTO STOCK ON UPDATE ================= */
-// productSchema.pre("findOneAndUpdate", function () {
-//   const update = this.getUpdate();
-
-//   if (update?.variants) {
-//     const totalStock = update.variants.reduce(
-//       (sum, v) => sum + (Number(v.stock) || 0),
-//       0
-//     );
-
-//     update.totalStock = totalStock;
-//     update.inStock = totalStock > 0;
-
-//     this.setUpdate(update);
-//   }
-// });
-
-// const VendorApplicationSchema = new mongoose.Schema(
-//   {
-//     businessName: String,
-//     email: String,
-//     phone: String,
-//     category: String,
-//     message: String,
-//     status: {
-//       type: String,
-//       enum: ["pending", "approved", "rejected"],
-//       default: "pending",
-//     },
-//   },
-//   { timestamps: true }
-// );
-
-// module.exports = mongoose.model("Product", productSchema);
+// module.exports =
+//   mongoose.models.Product ||
+//   mongoose.model("Product", productSchema);

@@ -1,4 +1,5 @@
 // routes/vendor.routes.js
+
 const express = require("express");
 const router = express.Router();
 
@@ -10,12 +11,38 @@ const {
 
 const { adminAuth } = require("../middlewares/admin.middleware");
 
-/* PUBLIC */
+/* ======================================================
+   PUBLIC ROUTES
+====================================================== */
+
+/*
+POST
+/api/vendors/apply
+
+Vendor application submit
+*/
 router.post("/apply", applyVendor);
 
-/* ADMIN */
+
+/* ======================================================
+   ADMIN ROUTES
+====================================================== */
+
+/*
+GET
+/api/vendors
+
+Get all vendor applications
+*/
 router.get("/", adminAuth, getAllApplications);
 
+
+/*
+PATCH
+/api/vendors/:id/status
+
+Approve / Reject vendor application
+*/
 router.patch(
   "/:id/status",
   adminAuth,

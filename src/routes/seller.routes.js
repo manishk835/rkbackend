@@ -9,15 +9,27 @@ const {
   deleteSellerProduct,
 } = require("../controllers/seller.controller");
 
-const { sellerAuth } = require("../middlewares/auth.middleware");
-const { sellerOnly } = require("../middlewares/seller.middleware");
+const {
+  protect,
+  requireRole,
+  approvedSeller,
+} = require("../middlewares/auth.middleware");
+
+/* ======================================================
+   SELLER ACCESS MIDDLEWARE
+====================================================== */
+
+const sellerAccess = [
+  protect,
+  requireRole("seller"),
+  approvedSeller,
+];
 
 /* ================= SELLER DASHBOARD ================= */
 
 router.get(
   "/dashboard",
-  sellerAuth,
-  sellerOnly,
+  sellerAccess,
   getSellerDashboard
 );
 
@@ -25,22 +37,19 @@ router.get(
 
 router.get(
   "/products",
-  sellerAuth,
-  sellerOnly,
+  sellerAccess,
   getSellerProducts
 );
 
 router.put(
   "/products/:id",
-  sellerAuth,
-  sellerOnly,
+  sellerAccess,
   updateSellerProduct
 );
 
 router.delete(
   "/products/:id",
-  sellerAuth,
-  sellerOnly,
+  sellerAccess,
   deleteSellerProduct
 );
 
@@ -48,9 +57,67 @@ router.delete(
 
 router.get(
   "/orders",
-  sellerAuth,
-  sellerOnly,
+  sellerAccess,
   getSellerOrders
 );
 
 module.exports = router;
+
+// // src/routes/seller.routes.js
+
+// const express = require("express");
+// const router = express.Router();
+
+// const {
+//   getSellerProducts,
+//   getSellerOrders,
+//   getSellerDashboard,
+//   updateSellerProduct,
+//   deleteSellerProduct,
+// } = require("../controllers/seller.controller");
+
+// const { sellerAuth } = require("../middlewares/auth.middleware");
+// const { sellerOnly } = require("../middlewares/seller.middleware");
+
+// /* ================= SELLER DASHBOARD ================= */
+
+// router.get(
+//   "/dashboard",
+//   sellerAuth,
+//   sellerOnly,
+//   getSellerDashboard
+// );
+
+// /* ================= SELLER PRODUCTS ================= */
+
+// router.get(
+//   "/products",
+//   sellerAuth,
+//   sellerOnly,
+//   getSellerProducts
+// );
+
+// router.put(
+//   "/products/:id",
+//   sellerAuth,
+//   sellerOnly,
+//   updateSellerProduct
+// );
+
+// router.delete(
+//   "/products/:id",
+//   sellerAuth,
+//   sellerOnly,
+//   deleteSellerProduct
+// );
+
+// /* ================= SELLER ORDERS ================= */
+
+// router.get(
+//   "/orders",
+//   sellerAuth,
+//   sellerOnly,
+//   getSellerOrders
+// );
+
+// module.exports = router;

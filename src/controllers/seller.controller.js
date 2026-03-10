@@ -1,32 +1,47 @@
+// // src/controllers/seller.controller.js
+
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 
 /* ================= SELLER PRODUCTS ================= */
 
 exports.getSellerProducts = async (req, res) => {
+
   try {
 
-    const products = await Product.find({
-      seller: req.seller._id,
-    }).sort({ createdAt: -1 });
+    const sellerId = req.user._id;
+
+    const products = await Product
+      .find({ seller: sellerId })
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(products);
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    console.error("Seller Products Error:", err);
+
+    res.status(500).json({
+      message: "Failed to load products",
+    });
+
   }
+
 };
 
 /* ================= SELLER ORDERS ================= */
 
 exports.getSellerOrders = async (req, res) => {
+
   try {
 
-    const sellerId = req.seller._id;
+    const sellerId = req.user._id;
 
     const orders = await Order.find({
       "items.seller": sellerId,
     })
+      .select("_id status paymentStatus createdAt customer items")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -53,21 +68,30 @@ exports.getSellerOrders = async (req, res) => {
         items: sellerItems,
         sellerTotal,
       };
+
     });
 
     res.json(filteredOrders);
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    console.error("Seller Orders Error:", err);
+
+    res.status(500).json({
+      message: "Failed to load orders",
+    });
+
   }
+
 };
 
 /* ================= SELLER DASHBOARD ================= */
 
 exports.getSellerDashboard = async (req, res) => {
+
   try {
 
-    const sellerId = req.seller._id;
+    const sellerId = req.user._id;
 
     const totalProducts =
       await Product.countDocuments({
@@ -98,13 +122,21 @@ exports.getSellerDashboard = async (req, res) => {
       });
 
     const revenue = await Order.aggregate([
-      { $match: { status: "Delivered" } },
+
+      {
+        $match: {
+          status: "Delivered",
+        },
+      },
+
       { $unwind: "$items" },
+
       {
         $match: {
           "items.seller": sellerId,
         },
       },
+
       {
         $group: {
           _id: null,
@@ -113,30 +145,43 @@ exports.getSellerDashboard = async (req, res) => {
           },
         },
       },
+
     ]);
 
     res.json({
+
       totalProducts,
       totalOrders,
       pendingOrders,
       lowStockProducts,
       totalRevenue: revenue[0]?.total || 0,
-      walletBalance: req.seller.walletBalance || 0,
+      walletBalance: req.user.walletBalance || 0,
+
     });
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    console.error("Seller Dashboard Error:", err);
+
+    res.status(500).json({
+      message: "Failed to load dashboard",
+    });
+
   }
+
 };
 
 /* ================= UPDATE SELLER PRODUCT ================= */
 
 exports.updateSellerProduct = async (req, res) => {
+
   try {
+
+    const sellerId = req.user._id;
 
     const product = await Product.findOne({
       _id: req.params.id,
-      seller: req.seller._id,
+      seller: sellerId,
     });
 
     if (!product) {
@@ -145,7 +190,26 @@ exports.updateSellerProduct = async (req, res) => {
       });
     }
 
-    Object.assign(product, req.body);
+    const allowedFields = [
+      "name",
+      "description",
+      "price",
+      "discountPrice",
+      "category",
+      "brand",
+      "images",
+      "sizes",
+      "colors",
+      "totalStock",
+    ];
+
+    allowedFields.forEach(field => {
+
+      if (req.body[field] !== undefined) {
+        product[field] = req.body[field];
+      }
+
+    });
 
     product.isApproved = false;
 
@@ -158,18 +222,28 @@ exports.updateSellerProduct = async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    console.error("Update Product Error:", err);
+
+    res.status(500).json({
+      message: "Product update failed",
+    });
+
   }
+
 };
 
 /* ================= DELETE SELLER PRODUCT ================= */
 
 exports.deleteSellerProduct = async (req, res) => {
+
   try {
+
+    const sellerId = req.user._id;
 
     const product = await Product.findOne({
       _id: req.params.id,
-      seller: req.seller._id,
+      seller: sellerId,
     });
 
     if (!product) {
@@ -185,6 +259,206 @@ exports.deleteSellerProduct = async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    console.error("Delete Product Error:", err);
+
+    res.status(500).json({
+      message: "Product delete failed",
+    });
+
   }
+
 };
+
+
+// // src/controllers/seller.controller.js
+// const Product = require("../models/Product");
+// const Order = require("../models/Order");
+
+// /* ================= SELLER PRODUCTS ================= */
+
+// exports.getSellerProducts = async (req, res) => {
+//   try {
+
+//     const products = await Product.find({
+//       seller: req.seller._id,
+//     }).sort({ createdAt: -1 });
+
+//     res.json(products);
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// /* ================= SELLER ORDERS ================= */
+
+// exports.getSellerOrders = async (req, res) => {
+//   try {
+
+//     const sellerId = req.seller._id;
+
+//     const orders = await Order.find({
+//       "items.seller": sellerId,
+//     })
+//       .sort({ createdAt: -1 })
+//       .lean();
+
+//     const filteredOrders = orders.map(order => {
+
+//       const sellerItems = order.items.filter(
+//         item =>
+//           item.seller.toString() ===
+//           sellerId.toString()
+//       );
+
+//       const sellerTotal = sellerItems.reduce(
+//         (sum, item) =>
+//           sum + item.sellerEarning,
+//         0
+//       );
+
+//       return {
+//         _id: order._id,
+//         status: order.status,
+//         paymentStatus: order.paymentStatus,
+//         createdAt: order.createdAt,
+//         customer: order.customer,
+//         items: sellerItems,
+//         sellerTotal,
+//       };
+//     });
+
+//     res.json(filteredOrders);
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// /* ================= SELLER DASHBOARD ================= */
+
+// exports.getSellerDashboard = async (req, res) => {
+//   try {
+
+//     const sellerId = req.seller._id;
+
+//     const totalProducts =
+//       await Product.countDocuments({
+//         seller: sellerId,
+//       });
+
+//     const lowStockProducts =
+//       await Product.countDocuments({
+//         seller: sellerId,
+//         totalStock: { $lt: 5 },
+//       });
+
+//     const totalOrders =
+//       await Order.countDocuments({
+//         "items.seller": sellerId,
+//       });
+
+//     const pendingOrders =
+//       await Order.countDocuments({
+//         "items.seller": sellerId,
+//         status: {
+//           $in: [
+//             "Pending",
+//             "Confirmed",
+//             "Packed",
+//           ],
+//         },
+//       });
+
+//     const revenue = await Order.aggregate([
+//       { $match: { status: "Delivered" } },
+//       { $unwind: "$items" },
+//       {
+//         $match: {
+//           "items.seller": sellerId,
+//         },
+//       },
+//       {
+//         $group: {
+//           _id: null,
+//           total: {
+//             $sum: "$items.sellerEarning",
+//           },
+//         },
+//       },
+//     ]);
+
+//     res.json({
+//       totalProducts,
+//       totalOrders,
+//       pendingOrders,
+//       lowStockProducts,
+//       totalRevenue: revenue[0]?.total || 0,
+//       walletBalance: req.seller.walletBalance || 0,
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// /* ================= UPDATE SELLER PRODUCT ================= */
+
+// exports.updateSellerProduct = async (req, res) => {
+//   try {
+
+//     const product = await Product.findOne({
+//       _id: req.params.id,
+//       seller: req.seller._id,
+//     });
+
+//     if (!product) {
+//       return res.status(404).json({
+//         message: "Product not found",
+//       });
+//     }
+
+//     Object.assign(product, req.body);
+
+//     product.isApproved = false;
+
+//     await product.save();
+
+//     res.json({
+//       message:
+//         "Product updated. Waiting for admin approval.",
+//       product,
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// /* ================= DELETE SELLER PRODUCT ================= */
+
+// exports.deleteSellerProduct = async (req, res) => {
+//   try {
+
+//     const product = await Product.findOne({
+//       _id: req.params.id,
+//       seller: req.seller._id,
+//     });
+
+//     if (!product) {
+//       return res.status(404).json({
+//         message: "Product not found",
+//       });
+//     }
+
+//     await product.deleteOne();
+
+//     res.json({
+//       message: "Product deleted successfully",
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
