@@ -24,24 +24,47 @@ const generatePassword = () => {
 ====================================================== */
 
 exports.applyVendor = async (req, res) => {
-
   try {
+    // 🔥 LOGIN REQUIRED
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Login required",
+      });
+    }
 
-    const { businessName, email, phone, category, message } = req.body;
+    const { businessName, phone, category, message } = req.body;
 
-    if (!businessName || !email || !phone || !category) {
+    if (!businessName || !phone || !category) {
       return res.status(400).json({
         message: "All required fields missing",
       });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findById(req.user._id);
 
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    // 🔥 ALREADY SELLER
+    if (user.sellerStatus === "approved") {
+      return res.status(400).json({
+        message: "You are already a seller",
+      });
+    }
+
+    // 🔥 PENDING
+    if (user.sellerStatus === "pending") {
+      return res.status(400).json({
+        message: "Application already submitted",
+      });
+    }
+
+    // 🔥 CHECK EXISTING APPLICATION
     const existing = await VendorApplication.findOne({
-      $or: [
-        { email: cleanEmail },
-        { phone: phone }
-      ],
+      user: user._id,
       status: "pending",
     });
 
@@ -51,31 +74,33 @@ exports.applyVendor = async (req, res) => {
       });
     }
 
+    // 🔥 CREATE APPLICATION (USER LINKED)
     const application = await VendorApplication.create({
+      user: user._id, // 🔥 IMPORTANT
       businessName: businessName.trim(),
-      email: cleanEmail,
+      email: user.email, // 🔥 AUTO
       phone,
       category,
       message,
       status: "pending",
     });
 
+    // 🔥 UPDATE USER STATUS
+    user.sellerStatus = "pending";
+    await user.save();
+
     res.status(201).json({
       success: true,
       message: "Application submitted successfully",
       application,
     });
-
   } catch (error) {
-
     console.error("Vendor Apply Error:", error);
 
     res.status(500).json({
       message: "Server error",
     });
-
   }
-
 };
 
 /* ======================================================
@@ -83,26 +108,19 @@ exports.applyVendor = async (req, res) => {
 ====================================================== */
 
 exports.getAllApplications = async (req, res) => {
-
   try {
-
-    const applications = await VendorApplication
-      .find()
+    const applications = await VendorApplication.find()
       .sort({ createdAt: -1 })
       .lean();
 
     res.json(applications);
-
   } catch (error) {
-
     console.error("Get Applications Error:", error);
 
     res.status(500).json({
       message: "Server error",
     });
-
   }
-
 };
 
 /* ======================================================
@@ -110,9 +128,7 @@ exports.getAllApplications = async (req, res) => {
 ====================================================== */
 
 exports.updateApplicationStatus = async (req, res) => {
-
   try {
-
     const { id } = req.params;
     const { status } = req.body;
 
@@ -145,7 +161,6 @@ exports.updateApplicationStatus = async (req, res) => {
     ====================================================== */
 
     if (status === "approved") {
-
       let user = await User.findOne({
         email: application.email,
       });
@@ -153,9 +168,7 @@ exports.updateApplicationStatus = async (req, res) => {
       const tempPassword = generatePassword();
 
       if (!user) {
-
         user = await User.create({
-
           name: application.businessName,
           email: application.email,
           phone: application.phone,
@@ -168,13 +181,8 @@ exports.updateApplicationStatus = async (req, res) => {
           sellerInfo: {
             storeName: application.businessName,
           },
-
         });
-
-      }
-
-      else {
-
+      } else {
         user.role = "seller";
         user.sellerStatus = "approved";
         user.sellerApprovedAt = new Date();
@@ -186,15 +194,12 @@ exports.updateApplicationStatus = async (req, res) => {
         user.sellerInfo.storeName = application.businessName;
 
         await user.save();
-
       }
 
       /* ================= EMAIL ================= */
 
       try {
-
         await transporter.sendMail({
-
           from: `"RK Fashion" <${process.env.EMAIL_USER}>`,
           to: application.email,
 
@@ -223,287 +228,21 @@ exports.updateApplicationStatus = async (req, res) => {
 
           </div>
           `,
-
         });
-
       } catch (err) {
-
         console.error("Email send failed", err);
-
       }
-
     }
 
     res.json({
       message: "Status updated successfully",
       application,
     });
-
   } catch (error) {
-
     console.error("Update Vendor Status Error:", error);
 
     res.status(500).json({
       message: "Server error",
     });
-
   }
-
 };
-
-// const VendorApplication = require("../models/VendorApplication");
-// const User = require("../models/User");
-// const nodemailer = require("nodemailer");
-
-// /* ================= EMAIL TRANSPORT ================= */
-
-// const transporter = nodemailer.createTransport({
-//   service: "gmail",
-//   auth: {
-//     user: process.env.EMAIL_USER,
-//     pass: process.env.EMAIL_PASS,
-//   },
-// });
-
-// /* ======================================================
-//    APPLY AS VENDOR (PUBLIC)
-// ====================================================== */
-
-// exports.applyVendor = async (req, res) => {
-
-//   try {
-
-//     const { businessName, email, phone, category, message } = req.body;
-
-//     /* ================= VALIDATION ================= */
-
-//     if (!businessName || !email || !phone || !category) {
-
-//       return res.status(400).json({
-//         message: "All required fields missing",
-//       });
-
-//     }
-
-//     /* ================= DUPLICATE CHECK ================= */
-
-//     const existing = await VendorApplication.findOne({ email });
-
-//     if (existing) {
-
-//       return res.status(400).json({
-//         message: "Application already submitted",
-//       });
-
-//     }
-
-//     /* ================= CREATE APPLICATION ================= */
-
-//     const application = await VendorApplication.create({
-
-//       businessName,
-//       email,
-//       phone,
-//       category,
-//       message,
-//       status: "pending",
-
-//     });
-
-//     res.status(201).json({
-
-//       message: "Application submitted successfully",
-//       application,
-
-//     });
-
-//   }
-
-//   catch (error) {
-
-//     console.error("Vendor Apply Error:", error);
-
-//     res.status(500).json({
-//       message: "Server error",
-//     });
-
-//   }
-
-// };
-
-// /* ======================================================
-//    GET ALL APPLICATIONS (ADMIN)
-// ====================================================== */
-
-// exports.getAllApplications = async (req, res) => {
-
-//   try {
-
-//     const applications = await VendorApplication
-//       .find()
-//       .sort({ createdAt: -1 });
-
-//     res.json(applications);
-
-//   }
-
-//   catch (error) {
-
-//     console.error("Get Applications Error:", error);
-
-//     res.status(500).json({
-//       message: "Server error",
-//     });
-
-//   }
-
-// };
-
-// /* ======================================================
-//    UPDATE APPLICATION STATUS (ADMIN)
-// ====================================================== */
-
-// exports.updateApplicationStatus = async (req, res) => {
-
-//   try {
-
-//     const { id } = req.params;
-//     const { status } = req.body;
-
-//     if (!["approved", "rejected"].includes(status)) {
-
-//       return res.status(400).json({
-//         message: "Invalid status",
-//       });
-
-//     }
-
-//     const application = await VendorApplication.findById(id);
-
-//     if (!application) {
-
-//       return res.status(404).json({
-//         message: "Application not found",
-//       });
-
-//     }
-
-//     application.status = status;
-//     await application.save();
-
-//     /* ======================================================
-//        SELLER APPROVED
-//     ====================================================== */
-
-//     if (status === "approved") {
-
-//       let user = await User.findOne({
-//         email: application.email,
-//       });
-
-//       const defaultPassword = "ChangeMe123!";
-
-//       if (!user) {
-
-//         user = await User.create({
-
-//           name: application.businessName,
-//           email: application.email,
-//           phone: application.phone,
-//           password: defaultPassword,
-
-//           role: "seller",
-//           isSellerApproved: true,
-//           sellerApprovedAt: new Date(),
-
-//           sellerInfo: {
-//             storeName: application.businessName,
-//           },
-
-//         });
-
-//       }
-
-//       else {
-
-//         user.role = "seller";
-//         user.isSellerApproved = true;
-//         user.sellerApprovedAt = new Date();
-
-//         if (!user.sellerInfo) {
-//           user.sellerInfo = {};
-//         }
-
-//         user.sellerInfo.storeName = application.businessName;
-
-//         await user.save();
-
-//       }
-
-//       /* ================= SEND EMAIL ================= */
-
-//       try {
-
-//         await transporter.sendMail({
-
-//           from: `"RK Fashion" <${process.env.EMAIL_USER}>`,
-//           to: application.email,
-
-//           subject: "Your RK Fashion Seller Account is Approved",
-
-//           html: `
-//           <div style="font-family:Arial;padding:20px">
-
-//             <h2>Congratulations 🎉</h2>
-
-//             <p>Your seller account has been approved on <b>RK Fashion</b>.</p>
-
-//             <p>You can now login using:</p>
-
-//             <p><b>Email:</b> ${application.email}</p>
-//             <p><b>Password:</b> ${defaultPassword}</p>
-
-//             <p>Please login and change your password immediately.</p>
-
-//             <br>
-
-//             <a href="${process.env.FRONTEND_URL}/login"
-//                style="background:#000;color:#fff;padding:12px 20px;text-decoration:none;border-radius:6px">
-//                Login Now
-//             </a>
-
-//           </div>
-//           `,
-
-//         });
-
-//       }
-
-//       catch (err) {
-
-//         console.error("Email send failed", err);
-
-//       }
-
-//     }
-
-//     res.json({
-
-//       message: "Status updated successfully",
-//       application,
-
-//     });
-
-//   }
-
-//   catch (error) {
-
-//     console.error("Update Vendor Status Error:", error);
-
-//     res.status(500).json({
-//       message: "Server error",
-//     });
-
-//   }
-
-// };

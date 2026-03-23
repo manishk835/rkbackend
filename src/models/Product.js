@@ -1,3 +1,5 @@
+// src/models/Product.js
+
 const mongoose = require("mongoose");
 
 /* ================= VARIANT ================= */
@@ -331,7 +333,7 @@ module.exports =
   mongoose.models.Product ||
   mongoose.model("Product", productSchema);
 
-// // // src/models/Product.js
+// src/models/Product.js
 
 // const mongoose = require("mongoose");
 

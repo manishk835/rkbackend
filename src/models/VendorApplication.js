@@ -1,9 +1,16 @@
-// models/VendorApplication.js
-
 const mongoose = require("mongoose");
 
 const vendorApplicationSchema = new mongoose.Schema(
   {
+    /* ================= USER LINK (🔥 NEW) ================= */
+
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
     /* ================= BUSINESS INFO ================= */
 
     businessName: {
@@ -71,22 +78,12 @@ const vendorApplicationSchema = new mongoose.Schema(
       trim: true,
     },
 
-    /* ================= FUTURE MARKETPLACE FEATURES ================= */
+    /* ================= FUTURE FEATURES ================= */
 
     documents: {
-      gstNumber: {
-        type: String,
-        trim: true,
-      },
-
-      panNumber: {
-        type: String,
-        trim: true,
-      },
-
-      storeLogo: {
-        type: String,
-      },
+      gstNumber: String,
+      panNumber: String,
+      storeLogo: String,
     },
 
     /* ================= META ================= */
@@ -96,7 +93,6 @@ const vendorApplicationSchema = new mongoose.Schema(
       default: "website",
     },
   },
-
   {
     timestamps: true,
   }
@@ -104,17 +100,10 @@ const vendorApplicationSchema = new mongoose.Schema(
 
 /* ================= INDEXES ================= */
 
-vendorApplicationSchema.index({ email: 1 });
-vendorApplicationSchema.index({ status: 1 });
-vendorApplicationSchema.index({ createdAt: -1 });
-
-/* ================= PREVENT DUPLICATE APPLICATION ================= */
-
+// 🔥 prevent same user multiple pending requests
 vendorApplicationSchema.index(
-  { email: 1, status: 1 },
-  {
-    unique: false,
-  }
+  { user: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "pending" } }
 );
 
 module.exports = mongoose.model(
