@@ -260,6 +260,8 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
+    const prevStatus = order.status;
+
     order.status = status;
 
     order.statusHistory.push({
@@ -267,24 +269,32 @@ exports.updateOrderStatus = async (req, res) => {
       updatedAt: new Date(),
     });
 
-    /* ===== GIVE LOYALTY POINTS WHEN DELIVERED ===== */
-    if (status === "Delivered") {
-      const User = require("../models/User");
+    /* ================= WALLET CREDIT SYSTEM ================= */
+
+    // 🔥 ONLY FIRST TIME Delivered
+    if (status === "Delivered" && prevStatus !== "Delivered") {
 
       for (const item of order.items) {
-        await User.findByIdAndUpdate(item.seller, {
-          $inc: { walletBalance: item.sellerEarning || 0 },
+
+        const seller = await User.findById(item.seller);
+
+        if (!seller) continue;
+
+        await seller.creditWallet({
+          amount: item.sellerEarning || 0,
+          source: "order",
+          orderId: order._id,
+          note: `Earning from order ${order.orderNumber}`,
         });
+
       }
 
-      await User.findByIdAndUpdate(order.user, {
-        $inc: { loyaltyPoints: order.loyaltyPointsEarned || 0 },
-      });
     }
 
     await order.save();
 
     return res.json(order);
+
   } catch (error) {
     console.error("Update Order Error:", error);
     return res.status(500).json({
@@ -603,19 +613,3 @@ exports.getPaymentAnalytics = async (req, res) => {
     paidOrders,
   });
 };
-
-/* ======================================================
-   SELLER – GET MY ORDERS
-====================================================== */
-// exports.getSellerOrders = async (req, res) => {
-//   try {
-//     const orders = await Order.find({
-//       "items.seller": req.user._id,
-//     })
-//       .sort({ createdAt: -1 });
-
-//     res.json(orders);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };

@@ -5,44 +5,82 @@ const mongoose = require("mongoose");
 /* ================= VARIANT ================= */
 
 const variantSchema = new mongoose.Schema(
-{
-  size: {
-    type: String,
-    required: true,
-    trim: true,
+  {
+    name: {
+      type: String,
+      required: true, // e.g. "1kg", "Red", "64GB"
+      trim: true,
+    },
+  
+    attributes: {
+      type: Map,
+      of: String, // 🔥 flexible (size, color, weight, etc)
+    },
+  
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+  
+    sku: {
+      type: String,
+      required: true,
+      uppercase: true,
+      trim: true,
+    },
+  
+    priceOverride: {
+      type: Number,
+      min: 0,
+    },
+  
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
+  { _id: false }
+  );
+// const variantSchema = new mongoose.Schema(
+// {
+//   size: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//   },
 
-  color: {
-    type: String,
-    required: true,
-    trim: true,
-  },
+//   color: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//   },
 
-  stock: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
+//   stock: {
+//     type: Number,
+//     default: 0,
+//     min: 0,
+//   },
 
-  sku: {
-    type: String,
-    required: true,
-    uppercase: true,
-    trim: true,
-  },
+//   sku: {
+//     type: String,
+//     required: true,
+//     uppercase: true,
+//     trim: true,
+//   },
 
-  priceOverride: {
-    type: Number,
-    min: 0,
-  },
+//   priceOverride: {
+//     type: Number,
+//     min: 0,
+//   },
 
-  isActive: {
-    type: Boolean,
-    default: true,
-  },
-},
-{ _id: false }
-);
+//   isActive: {
+//     type: Boolean,
+//     default: true,
+//   },
+// },
+// { _id: false }
+// );
 
 /* ================= IMAGE ================= */
 
@@ -110,7 +148,10 @@ const productSchema = new mongoose.Schema(
     lowercase: true,
     index: true,
   },
-
+  attributes: {
+    type: Map,
+    of: String,
+  },
   subCategory: {
     type: String,
     lowercase: true,
@@ -184,6 +225,11 @@ const productSchema = new mongoose.Schema(
     default: true,
   },
 
+  lowStockThreshold: {
+    type: Number,
+    default: 5,
+  },
+
   /* ================= REVIEWS ================= */
 
   rating: {
@@ -222,6 +268,21 @@ const productSchema = new mongoose.Schema(
   isActive: {
     type: Boolean,
     default: true,
+    index: true,
+  },
+
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
+  /* ================= STATUS SYSTEM ================= */
+
+  status: {
+    type: String,
+    enum: ["draft", "pending", "approved", "rejected"],
+    default: "draft",
     index: true,
   },
 
@@ -282,6 +343,9 @@ productSchema.index({ price: 1 });
 productSchema.index({ isActive: 1, isApproved: 1 });
 productSchema.index({ title: "text", description: "text" });
 
+// 🔥 SKU unique per seller
+productSchema.index({ "variants.sku": 1, seller: 1 }, { unique: true });
+
 /* ================= AUTO SLUG ================= */
 
 productSchema.pre("validate", function () {
@@ -333,7 +397,7 @@ module.exports =
   mongoose.models.Product ||
   mongoose.model("Product", productSchema);
 
-// src/models/Product.js
+// // src/models/Product.js
 
 // const mongoose = require("mongoose");
 
@@ -412,12 +476,12 @@ module.exports =
 //     required: true,
 //     trim: true,
 //     maxlength: 200,
+//     index: "text",
 //   },
 
 //   slug: {
 //     type: String,
 //     required: true,
-//     unique: true,
 //     lowercase: true,
 //     index: true,
 //   },
@@ -457,6 +521,7 @@ module.exports =
 //       type: String,
 //       lowercase: true,
 //       trim: true,
+//       index: true,
 //     },
 //   ],
 
@@ -525,6 +590,7 @@ module.exports =
 //     default: 0,
 //     min: 0,
 //     max: 5,
+//     index: true,
 //   },
 
 //   reviewsCount: {
@@ -591,6 +657,18 @@ module.exports =
 //     max: 100,
 //   },
 
+//   /* ================= ANALYTICS ================= */
+
+//   views: {
+//     type: Number,
+//     default: 0,
+//   },
+
+//   purchases: {
+//     type: Number,
+//     default: 0,
+//   },
+
 // },
 // { timestamps: true }
 // );
@@ -601,18 +679,21 @@ module.exports =
 // productSchema.index({ category: 1 });
 // productSchema.index({ price: 1 });
 // productSchema.index({ isActive: 1, isApproved: 1 });
-
+// productSchema.index({ title: "text", description: "text" });
+// productSchema.index({ "variants.sku": 1, seller: 1 }, { unique: true });
 // /* ================= AUTO SLUG ================= */
 
 // productSchema.pre("validate", function () {
 
 //   if (!this.slug && this.title) {
 
-//     this.slug = this.title
+//     const baseSlug = this.title
 //       .toLowerCase()
 //       .trim()
 //       .replace(/[^a-z0-9]+/g, "-")
 //       .replace(/^-+|-+$/g, "");
+
+//     this.slug = `${baseSlug}-${Date.now()}`;
 
 //   }
 
@@ -632,6 +713,18 @@ module.exports =
 //     this.inStock = this.totalStock > 0;
 
 //   }
+
+// });
+
+// /* ================= PRICE VALIDATION ================= */
+
+// productSchema.pre("save", function (next) {
+
+//   if (this.originalPrice && this.price > this.originalPrice) {
+//     return next(new Error("Price cannot exceed original price"));
+//   }
+
+//   next();
 
 // });
 

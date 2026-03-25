@@ -1,3 +1,5 @@
+// src/routes/seller.routes.js
+
 const express = require("express");
 const router = express.Router();
 
@@ -7,6 +9,8 @@ const {
   getSellerDashboard,
   updateSellerProduct,
   deleteSellerProduct,
+  getWalletTransactions,   // 🔥 NEW
+  withdrawFromWallet,      // 🔥 NEW
 } = require("../controllers/seller.controller");
 
 const {
@@ -27,44 +31,31 @@ const sellerAccess = [
 
 /* ================= SELLER DASHBOARD ================= */
 
-router.get(
-  "/dashboard",
-  sellerAccess,
-  getSellerDashboard
-);
+router.get("/dashboard", sellerAccess, getSellerDashboard);
 
 /* ================= SELLER PRODUCTS ================= */
 
-router.get(
-  "/products",
-  sellerAccess,
-  getSellerProducts
-);
+router.get("/products", sellerAccess, getSellerProducts);
 
-router.put(
-  "/products/:id",
-  sellerAccess,
-  updateSellerProduct
-);
+router.put("/products/:id", sellerAccess, updateSellerProduct);
 
-router.delete(
-  "/products/:id",
-  sellerAccess,
-  deleteSellerProduct
-);
+router.delete("/products/:id", sellerAccess, deleteSellerProduct);
 
 /* ================= SELLER ORDERS ================= */
 
-router.get(
-  "/orders",
-  sellerAccess,
-  getSellerOrders
-);
+router.get("/orders", sellerAccess, getSellerOrders);
+
+/* ================= WALLET ================= */
+
+// 🔥 Get wallet transactions
+router.get("/wallet", sellerAccess, getWalletTransactions);
+
+// 🔥 Withdraw money
+router.post("/wallet/withdraw", sellerAccess, withdrawFromWallet);
 
 module.exports = router;
 
-// // src/routes/seller.routes.js
-
+// // // src/routes/seller.routes.js
 // const express = require("express");
 // const router = express.Router();
 
@@ -76,15 +67,27 @@ module.exports = router;
 //   deleteSellerProduct,
 // } = require("../controllers/seller.controller");
 
-// const { sellerAuth } = require("../middlewares/auth.middleware");
-// const { sellerOnly } = require("../middlewares/seller.middleware");
+// const {
+//   protect,
+//   requireRole,
+//   approvedSeller,
+// } = require("../middlewares/auth.middleware");
+
+// /* ======================================================
+//    SELLER ACCESS MIDDLEWARE
+// ====================================================== */
+
+// const sellerAccess = [
+//   protect,
+//   requireRole("seller"),
+//   approvedSeller,
+// ];
 
 // /* ================= SELLER DASHBOARD ================= */
 
 // router.get(
 //   "/dashboard",
-//   sellerAuth,
-//   sellerOnly,
+//   sellerAccess,
 //   getSellerDashboard
 // );
 
@@ -92,22 +95,19 @@ module.exports = router;
 
 // router.get(
 //   "/products",
-//   sellerAuth,
-//   sellerOnly,
+//   sellerAccess,
 //   getSellerProducts
 // );
 
 // router.put(
 //   "/products/:id",
-//   sellerAuth,
-//   sellerOnly,
+//   sellerAccess,
 //   updateSellerProduct
 // );
 
 // router.delete(
 //   "/products/:id",
-//   sellerAuth,
-//   sellerOnly,
+//   sellerAccess,
 //   deleteSellerProduct
 // );
 
@@ -115,9 +115,9 @@ module.exports = router;
 
 // router.get(
 //   "/orders",
-//   sellerAuth,
-//   sellerOnly,
+//   sellerAccess,
 //   getSellerOrders
 // );
 
 // module.exports = router;
+

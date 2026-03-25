@@ -1,6 +1,7 @@
+
 // src/controllers/product.controller.js
 const Product = require("../models/Product");
-
+const Category = require("../models/Category");
 /* ======================================================
    CREATE PRODUCT (SELLER)
 ====================================================== */
@@ -10,77 +11,152 @@ exports.createProduct = async (req, res) => {
     const {
       title,
       price,
-      category,
       subCategory,
       brand,
       description,
       variants,
+      attributes,
       tags,
       images,
       thumbnail,
-      isFeatured,
-      isNewArrival,
-      isBestSeller,
     } = req.body;
 
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return res.status(400).json({
-        message: "At least one product image required",
-      });
-    }
+    /* ================= BASIC VALIDATION ================= */
 
-    if (!title || !price || !category || !description) {
+    if (!title || !price || !description) {
       return res.status(400).json({
         message: "Required fields missing",
       });
     }
 
-    const slug = title
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-
-    const slugExists = await Product.findOne({ slug });
-    if (slugExists) {
+    if (!variants || variants.length === 0) {
       return res.status(400).json({
-        message: "Product with similar title exists",
+        message: "Variants required",
       });
     }
+
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({
+        message: "At least one image required",
+      });
+    }
+
+    /* ================= USER BUSINESS TYPE ================= */
+
+    const user = req.user;
+
+    if (!user?.businessType) {
+      return res.status(400).json({
+        message: "Seller business type not set",
+      });
+    }
+
+    const categoryDoc = await Category.findOne({
+      slug: user.businessType,
+    });
+
+    if (!categoryDoc) {
+      return res.status(400).json({
+        message: "Invalid seller category",
+      });
+    }
+
+    /* ================= ATTRIBUTE VALIDATION ================= */
+
+    const categoryAttributes = categoryDoc.attributes || [];
+
+    const productAttributes = {};
+    const variantAttributesList = [];
+
+    categoryAttributes.forEach((attr) => {
+      if (attr.isVariant) {
+        variantAttributesList.push(attr.name);
+      } else {
+        if (attr.isRequired && !attributes?.[attr.name]) {
+          throw new Error(`${attr.displayName} is required`);
+        }
+
+        if (attributes?.[attr.name]) {
+          productAttributes[attr.name] = attributes[attr.name];
+        }
+      }
+    });
+
+    /* ================= VARIANT VALIDATION ================= */
+
+    variants.forEach((v) => {
+      if (!v.sku) throw new Error("SKU required");
+
+      variantAttributesList.forEach((attrName) => {
+        if (!v.attributes || !v.attributes[attrName]) {
+          throw new Error(`Variant missing ${attrName}`);
+        }
+      });
+    });
+
+    /* ================= SLUG ================= */
+
+    const baseSlug = title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-");
+
+    const slug = `${baseSlug}-${Date.now()}`;
+
+    /* ================= STOCK ================= */
 
     let totalStock = 0;
     variants.forEach((v) => {
       totalStock += Number(v.stock) || 0;
     });
 
+    /* ================= SKU CHECK ================= */
+
+    const skus = variants.map((v) => v.sku);
+
+    const existing = await Product.findOne({
+      "variants.sku": { $in: skus },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "SKU already exists",
+      });
+    }
+
+    /* ================= CREATE ================= */
+
     const product = await Product.create({
       title,
       slug,
       price,
-      category: category.toLowerCase(),
+
+      category: user.businessType, // ✅ FINAL FIX
+
       subCategory: subCategory?.toLowerCase(),
       brand: brand?.toLowerCase(),
       description,
+
+      attributes: productAttributes,
       variants,
+
       totalStock,
-      thumbnail: thumbnail || images[0].url,
+      thumbnail: thumbnail || images[0]?.url,
       images,
       tags,
       seller: req.user._id,
-      // seller: req.user.id,
-      isApproved: false,
-      isFeatured,
-      isNewArrival,
-      isBestSeller,
     });
 
     res.status(201).json({
-      message: "Product submitted for approval",
+      message: "Product created",
       product,
     });
+
   } catch (err) {
     console.error("CREATE PRODUCT ERROR:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({
+      message: err.message,
+    });
   }
 };
   /* ======================================================
@@ -261,18 +337,26 @@ exports.getProductById = async (req, res) => {
         filter.brand = { $in: brandsArray };
       }
   
-      /* ================= SIZE ================= */
-      if (size) {
-        const sizeArray = size.split(",");
-        filter["variants.size"] = { $in: sizeArray };
-      }
+      // /* ================= SIZE ================= */
+      // if (size) {
+      //   const sizeArray = size.split(",");
+      //   filter["variants.size"] = { $in: sizeArray };
+      // }
   
-      /* ================= COLOR ================= */
-      if (color) {
-        const colorArray = color.split(",");
-        filter["variants.color"] = { $in: colorArray };
+      // /* ================= COLOR ================= */
+      // if (color) {
+      //   const colorArray = color.split(",");
+      //   filter["variants.color"] = { $in: colorArray };
+      // }
+      if (req.query.attributes) {
+        const attrs = JSON.parse(req.query.attributes);
+      
+        Object.keys(attrs).forEach((key) => {
+          filter[`variants.attributes.${key}`] = {
+            $in: attrs[key],
+          };
+        });
       }
-  
       /* ================= PRICE ================= */
       if (minPrice || maxPrice) {
         filter.price = {};
@@ -432,168 +516,6 @@ exports.getProductById = async (req, res) => {
     }
   };
   
-
-/* ======================================================
-   GET ALL PRODUCTS (WITH FILTERS)
-   ====================================================== */
-   /* ======================================================
-   GET ALL PRODUCTS (WITH FILTERS)
-====================================================== */
-// exports.getAllProducts = async (req, res) => {
-//   try {
-//     let {
-//       sort,
-//       brand,
-//       size,
-//       color,
-//       rating,
-//       minPrice,
-//       maxPrice,
-//     } = req.query;
-
-//     /* ================= BASE FILTER ================= */
-//     const filter = {
-//       isActive: true,
-//       isApproved: true,
-//     };
-
-//     /* ================= SANITIZE EMPTY PARAMS ================= */
-
-//     if (brand && brand !== "") {
-//       filter.brand = { $in: brand.split(",") };
-//     }
-
-//     if (size && size !== "") {
-//       filter["variants.size"] = {
-//         $in: size.split(","),
-//       };
-//     }
-
-//     if (color && color !== "") {
-//       filter["variants.color"] = {
-//         $in: color.split(","),
-//       };
-//     }
-
-//     if (rating && rating !== "") {
-//       filter.rating = { $gte: Number(rating) };
-//     }
-
-//     if (minPrice || maxPrice) {
-//       filter.price = {};
-//       if (minPrice)
-//         filter.price.$gte = Number(minPrice);
-//       if (maxPrice)
-//         filter.price.$lte = Number(maxPrice);
-//     }
-
-//     /* ================= SORT ================= */
-
-//     let sortQuery = { createdAt: -1 };
-
-//     if (sort === "az") sortQuery = { title: 1 };
-//     if (sort === "price-low") sortQuery = { price: 1 };
-//     if (sort === "price-high") sortQuery = { price: -1 };
-//     if (sort === "newest") sortQuery = { createdAt: -1 };
-
-//     /* ================= PRODUCTS ================= */
-
-//     const products = await Product.find(filter).sort(
-//       sortQuery
-//     );
-
-//     /* ================= FILTER DATA ================= */
-
-//     const brands = await Product.aggregate([
-//       { $match: { isActive: true } },
-//       {
-//         $group: {
-//           _id: "$brand",
-//           count: { $sum: 1 },
-//         },
-//       },
-//       { $sort: { _id: 1 } },
-//     ]);
-
-//     const subCategories = await Product.aggregate([
-//       { $match: { isActive: true } },
-//       {
-//         $group: {
-//           _id: "$subCategory",
-//           count: { $sum: 1 },
-//         },
-//       },
-//       { $sort: { _id: 1 } },
-//     ]);
-
-//     const sizes = await Product.aggregate([
-//       { $unwind: "$variants" },
-//       { $match: { isActive: true } },
-//       {
-//         $group: {
-//           _id: "$variants.size",
-//           count: { $sum: 1 },
-//         },
-//       },
-//       { $sort: { _id: 1 } },
-//     ]);
-
-//     const colors = await Product.aggregate([
-//       { $unwind: "$variants" },
-//       { $match: { isActive: true } },
-//       {
-//         $group: {
-//           _id: "$variants.color",
-//           count: { $sum: 1 },
-//         },
-//       },
-//       { $sort: { _id: 1 } },
-//     ]);
-
-//     const ratings = [5, 4, 3, 2, 1];
-
-//     const priceAgg = await Product.aggregate([
-//       { $match: { isActive: true } },
-//       {
-//         $group: {
-//           _id: null,
-//           minPrice: { $min: "$price" },
-//           maxPrice: { $max: "$price" },
-//         },
-//       },
-//     ]);
-
-//     return res.json({
-//       products,
-//       filters: {
-//         brands,
-//         subCategories,
-//         sizes,
-//         colors,
-//         ratings,
-//         priceRange:
-//           priceAgg[0] || {
-//             minPrice: 0,
-//             maxPrice: 0,
-//           },
-//       },
-//     });
-
-//   } catch (error) {
-//     console.error("Get All Products Error:", error);
-//     return res.status(500).json({
-//       products: [],
-//       filters: {
-//         brands: [],
-//         subCategories: [],
-//         sizes: [],
-//         colors: [],
-//         ratings: [],
-//         priceRange: { minPrice: 0, maxPrice: 0 },
-//       },
-//     });
-//   }
-// };
 exports.getAllProducts = async (req, res) => {
   try {
     let {
@@ -800,28 +722,6 @@ exports.approveProduct = async (req, res) => {
     });
   }
 };
-// exports.approveProduct = async (req, res) => {
-//   try {
-//     const product = await Product.findByIdAndUpdate(
-//       req.params.id,
-//       {
-//         isApproved: true,            // ✅ FIX
-//         approvedBy: req.user._id,
-//         approvedAt: new Date(),
-//       },
-//       { new: true }
-//     );
-
-//     if (!product) {
-//       return res.status(404).json({ message: "Not found" });
-//     }
-
-//     res.json({ message: "Product approved", product });
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
-
 /* ======================================================
    GET MY PRODUCTS (SELLER)
 ====================================================== */
