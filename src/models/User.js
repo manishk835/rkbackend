@@ -66,7 +66,10 @@ const userSchema = new mongoose.Schema(
       minlength: 2,
       maxlength: 100,
     },
-
+    profileImage: {
+      type: String,
+      default: "",
+    },
     // email: {
     //   type: String,
     //   required: true,

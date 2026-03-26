@@ -338,6 +338,7 @@ exports.login = async (req, res) => {
         phone: user.phone,
         email: user.email,
         role: user.role,
+        profileImage: user.profileImage,
       },
     });
   } catch (err) {
@@ -353,10 +354,62 @@ exports.login = async (req, res) => {
    GET ME
 ====================================================== */
 
-exports.getMe = (req, res) => {
-  res.json(req.user);
-};
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "-password -otpCode -otpExpires -resetOtpCode -resetOtpExpires"
+    );
 
+    res.json({
+      _id: user._id,
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      role: user.role,
+      profileImage: user.profileImage || "",
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch user" });
+  }
+};
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, profileImage } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // ✅ name validation
+    if (name && name.trim().length < 2) {
+      return res.status(400).json({
+        message: "Name must be at least 2 characters",
+      });
+    }
+
+    if (name) user.name = name.trim();
+
+    // ✅ image update
+    if (profileImage) user.profileImage = profileImage;
+
+    await user.save();
+
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        name: user.name,
+        profileImage: user.profileImage,
+      },
+    });
+  } catch (err) {
+    console.error("Update Profile Error:", err);
+    res.status(500).json({
+      message: "Failed to update profile",
+    });
+  }
+};
 /* ======================================================
    LOGOUT
 ====================================================== */
