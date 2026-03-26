@@ -217,43 +217,91 @@ exports.createProduct = async (req, res) => {
   
   
 /* ======================================================
-   GET ALL PRODUCTS (PUBLIC)
+   GET ALL PRODUCTS (PUBLIC) — FINAL PRODUCTION VERSION
    ====================================================== */
    exports.getProducts = async (req, res) => {
     try {
-      const { page = 1, limit = 12, sort } = req.query;
+      const {
+        page = 1,
+        limit = 12,
+        sort,
+        category,
+        filter, // featured | new | best
+      } = req.query;
   
-      const skip = (Number(page) - 1) * Number(limit);
+      const pageNum = Number(page);
+      const limitNum = Number(limit);
+      const skip = (pageNum - 1) * limitNum;
+  
+      /* ================= BASE QUERY ================= */
+  
+      const query = {
+        isActive: true,
+        isApproved: true,
+      };
+  
+      /* ================= CATEGORY ================= */
+  
+      const isCategorySelected =
+        category && category !== "all";
+  
+      if (isCategorySelected) {
+        // strict + case insensitive match
+        query.category = {
+          $regex: new RegExp(`^${category}$`, "i"),
+        };
+      }
+  
+      /* ================= FILTER ================= */
+  
+      // 🔥 IMPORTANT: filter ONLY when NO category selected
+      if (!isCategorySelected) {
+        if (filter === "featured") query.isFeatured = true;
+        if (filter === "new") query.isNewArrival = true;
+        if (filter === "best") query.isBestSeller = true;
+      }
+  
+      /* ================= SORT ================= */
   
       let sortQuery = { createdAt: -1 };
+  
       if (sort === "price-low") sortQuery = { price: 1 };
       if (sort === "price-high") sortQuery = { price: -1 };
       if (sort === "az") sortQuery = { title: 1 };
   
+      /* ================= FETCH ================= */
+  
       const [products, total] = await Promise.all([
-        // Product.find({ isActive: true})
-        Product.find({ isActive: true, isApproved: true })
-          .select("-variants.sku") // hide internal SKU
+        Product.find(query)
+          .select("-variants.sku")
           .sort(sortQuery)
           .skip(skip)
-          .limit(Number(limit))
+          .limit(limitNum)
           .lean(),
-        Product.countDocuments({ isActive: true, isApproved: true }),
+  
+        Product.countDocuments(query),
       ]);
   
+      /* ================= RESPONSE ================= */
+  
       return res.json({
+        success: true,
         products,
         pagination: {
           total,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(total / limit),
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
         },
       });
   
     } catch (error) {
       console.error("Get Products Error:", error);
-      return res.status(500).json({ products: [] });
+  
+      return res.status(500).json({
+        success: false,
+        products: [],
+      });
     }
   };
   
