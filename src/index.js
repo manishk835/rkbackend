@@ -61,7 +61,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
@@ -70,7 +69,14 @@ app.use(
 
       return callback(new Error("CORS not allowed"));
     },
+
     credentials: true,
+
+    // 🔥 ADD THIS
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+
+    // 🔥 MOST IMPORTANT
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 

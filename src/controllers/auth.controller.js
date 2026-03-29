@@ -197,7 +197,6 @@ exports.verifyOTP = async (req, res) => {
     res.json({
       message: "Verified successfully",
     });
-
   } catch (err) {
     console.error("Verify OTP Error:", err);
 
@@ -252,7 +251,6 @@ exports.resendOtp = async (req, res) => {
     res.json({
       message: "OTP sent",
     });
-
   } catch (err) {
     console.error("Resend OTP Error:", err);
 
@@ -330,8 +328,20 @@ exports.login = async (req, res) => {
 
     res.cookie("token", token, cookieOptions);
 
+    // res.json({
+    //   message: "Login successful",
+    //   user: {
+    //     _id: user._id,
+    //     name: user.name,
+    //     phone: user.phone,
+    //     email: user.email,
+    //     role: user.role,
+    //     profileImage: user.profileImage,
+    //   },
+    // });
     res.json({
       message: "Login successful",
+      token, // 🔥 MUST
       user: {
         _id: user._id,
         name: user.name,
@@ -466,7 +476,6 @@ exports.forgotPassword = async (req, res) => {
     res.json({
       message: "Reset OTP sent",
     });
-
   } catch (err) {
     console.error("Forgot Password Error:", err);
 

@@ -1,3 +1,4 @@
+// models/VendorApplication.js
 const mongoose = require("mongoose");
 
 const vendorApplicationSchema = new mongoose.Schema(

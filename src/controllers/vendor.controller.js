@@ -27,20 +27,36 @@ const generatePassword = () => {
 
 exports.applyVendor = async (req, res) => {
   try {
+    // 🔐 LOGIN REQUIRED
     if (!req.user) {
       return res.status(401).json({
         message: "Login required",
       });
     }
 
-    const { businessName, phone, businessType, message } = req.body;
+    const { businessName, phone, businessType, message, email } = req.body;
 
-    if (!businessName || !phone || !businessType) {
+    // ✅ VALIDATION
+    if (
+      !businessName?.trim() ||
+      !phone?.trim() ||
+      !businessType?.trim() ||
+      !email?.trim()
+    ) {
       return res.status(400).json({
         message: "All required fields missing",
       });
     }
 
+    // ✅ EMAIL FORMAT CHECK
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        message: "Invalid email format",
+      });
+    }
+
+    // ✅ USER FETCH
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -49,18 +65,26 @@ exports.applyVendor = async (req, res) => {
       });
     }
 
+    // 🔥 UPDATE EMAIL IF MISSING / DIFFERENT
+    if (!user.email || user.email !== email.trim()) {
+      user.email = email.trim();
+    }
+
+    // 🔥 ALREADY SELLER
     if (user.sellerStatus === "approved") {
       return res.status(400).json({
         message: "You are already a seller",
       });
     }
 
+    // 🔥 PENDING
     if (user.sellerStatus === "pending") {
       return res.status(400).json({
         message: "Application already submitted",
       });
     }
 
+    // 🔥 CHECK EXISTING APPLICATION
     const existing = await VendorApplication.findOne({
       user: user._id,
       status: "pending",
@@ -72,20 +96,22 @@ exports.applyVendor = async (req, res) => {
       });
     }
 
+    // ✅ CREATE APPLICATION
     const application = await VendorApplication.create({
       user: user._id,
       businessName: businessName.trim(),
-      email: user.email,
-      phone,
-      businessType, // ✅ FINAL CHANGE
-      message,
+      email: email.trim(),
+      phone: phone.trim(),
+      category: businessType.trim(),
+      message: message?.trim() || "",
       status: "pending",
     });
 
+    // ✅ UPDATE USER STATUS
     user.sellerStatus = "pending";
     await user.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Application submitted successfully",
       application,
@@ -94,7 +120,7 @@ exports.applyVendor = async (req, res) => {
   } catch (error) {
     console.error("Vendor Apply Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error",
     });
   }
@@ -225,7 +251,6 @@ exports.updateApplicationStatus = async (req, res) => {
       message: "Status updated successfully",
       application,
     });
-
   } catch (error) {
     console.error("Update Vendor Status Error:", error);
 
