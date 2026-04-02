@@ -181,26 +181,37 @@ const products = [
 
 const seedProducts = async () => {
   try {
-    await connectDB();
+    if (mongoose.connection.readyState === 0) {
+      await connectDB();
+    }
 
     console.log("🔎 Fetching Admin...");
 
     const admin = await User.findOne({
-      email: "admin@rkfashion.com",
+      email: "manishkumar.dev08@gmail.com",
     });
 
     if (!admin) throw new Error("Admin not found");
 
-    await Product.deleteMany();
+    console.log("🧹 Cleaning old products...");
 
-    const data = products.map((p) => ({
-      ...p,
-      seller: admin._id,
-    }));
+    await Product.deleteMany({ seller: admin._id });
 
-    await Product.insertMany(data);
+    console.log("📦 Inserting products...");
 
-    console.log("✅ Seed completed (Fashion + Medical + Electronics)");
+    for (const p of products) {
+      await Product.updateOne(
+        { title: p.title },
+        {
+          ...p,
+          seller: admin._id,
+          slug: p.title.toLowerCase().replace(/\s+/g, "-"),
+        },
+        { upsert: true }
+      );
+    }
+
+    console.log("✅ Seed completed (SAFE MODE)");
     process.exit();
 
   } catch (err) {

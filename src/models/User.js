@@ -208,7 +208,13 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorSecret: {
+      type: String, // base32 secret
+    },
     /* ================= RESET ================= */
 
     resetOtpCode: String,
@@ -224,6 +230,7 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true }
+
 );
 
 /* ======================================================

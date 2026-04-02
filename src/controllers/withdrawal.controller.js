@@ -1,13 +1,25 @@
 const Withdrawal = require("../models/Withdrawal");
 const User = require("../models/User");
+const mongoose = require("mongoose");
 
-/* ================= SELLER REQUEST WITHDRAW ================= */
+/* ================= SELLER REQUEST ================= */
 
 exports.createWithdrawal = async (req, res) => {
   try {
-
     const sellerId = req.seller._id;
     const { amount, method, accountDetails } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        message: "Invalid amount",
+      });
+    }
+
+    if (!method) {
+      return res.status(400).json({
+        message: "Withdrawal method required",
+      });
+    }
 
     const seller = await User.findById(sellerId);
 
@@ -17,7 +29,7 @@ exports.createWithdrawal = async (req, res) => {
       });
     }
 
-    if (amount > seller.walletBalance) {
+    if (seller.walletBalance < amount) {
       return res.status(400).json({
         message: "Insufficient wallet balance",
       });
@@ -28,41 +40,94 @@ exports.createWithdrawal = async (req, res) => {
       amount,
       method,
       accountDetails,
+      status: "Pending",
     });
 
     res.status(201).json({
       message: "Withdrawal request created",
       withdrawal,
     });
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-
-/* ================= SELLER WITHDRAW LIST ================= */
+/* ================= SELLER HISTORY ================= */
 
 exports.getSellerWithdrawals = async (req, res) => {
   try {
-
     const withdrawals = await Withdrawal.find({
       seller: req.seller._id,
     }).sort({ createdAt: -1 });
 
     res.json(withdrawals);
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-
-/* ================= ADMIN APPROVE WITHDRAW ================= */
+/* ================= ADMIN APPROVE ================= */
 
 exports.approveWithdrawal = async (req, res) => {
-  try {
+  const session = await mongoose.startSession();
 
+  try {
+    session.startTransaction();
+
+    const withdrawal = await Withdrawal.findById(
+      req.params.id
+    ).session(session);
+
+    if (!withdrawal) {
+      throw new Error("Withdrawal not found");
+    }
+
+    if (withdrawal.status !== "Pending") {
+      throw new Error("Already processed");
+    }
+
+    const seller = await User.findById(
+      withdrawal.seller
+    ).session(session);
+
+    if (!seller) {
+      throw new Error("Seller not found");
+    }
+
+    if (seller.walletBalance < withdrawal.amount) {
+      throw new Error("Insufficient balance");
+    }
+
+    // 🔥 ATOMIC UPDATE
+    seller.walletBalance -= withdrawal.amount;
+    await seller.save({ session });
+
+    withdrawal.status = "Approved";
+    withdrawal.processedAt = new Date();
+
+    await withdrawal.save({ session });
+
+    await session.commitTransaction();
+
+    res.json({
+      message: "Withdrawal approved",
+      withdrawal,
+    });
+  } catch (err) {
+    await session.abortTransaction();
+
+    res.status(400).json({
+      message: err.message || "Approval failed",
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+/* ================= ADMIN REJECT ================= */
+
+exports.rejectWithdrawal = async (req, res) => {
+  try {
     const withdrawal = await Withdrawal.findById(
       req.params.id
     );
@@ -79,56 +144,6 @@ exports.approveWithdrawal = async (req, res) => {
       });
     }
 
-    const seller = await User.findById(
-      withdrawal.seller
-    );
-
-    if (!seller) {
-      return res.status(404).json({
-        message: "Seller not found",
-      });
-    }
-
-    if (seller.walletBalance < withdrawal.amount) {
-      return res.status(400).json({
-        message: "Seller balance insufficient",
-      });
-    }
-
-    seller.walletBalance -= withdrawal.amount;
-    await seller.save();
-
-    withdrawal.status = "Approved";
-    withdrawal.processedAt = new Date();
-
-    await withdrawal.save();
-
-    res.json({
-      message: "Withdrawal approved",
-      withdrawal,
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-
-/* ================= ADMIN REJECT WITHDRAW ================= */
-
-exports.rejectWithdrawal = async (req, res) => {
-  try {
-
-    const withdrawal = await Withdrawal.findById(
-      req.params.id
-    );
-
-    if (!withdrawal) {
-      return res.status(404).json({
-        message: "Withdrawal not found",
-      });
-    }
-
     withdrawal.status = "Rejected";
     withdrawal.processedAt = new Date();
 
@@ -138,24 +153,28 @@ exports.rejectWithdrawal = async (req, res) => {
       message: "Withdrawal rejected",
       withdrawal,
     });
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-
-/* ================= ADMIN ALL WITHDRAWS ================= */
+/* ================= ADMIN ALL ================= */
 
 exports.getAllWithdrawals = async (req, res) => {
   try {
+    const { status } = req.query;
 
-    const withdrawals = await Withdrawal.find()
+    const query = {};
+
+    if (status) {
+      query.status = status;
+    }
+
+    const withdrawals = await Withdrawal.find(query)
       .populate("seller", "name email")
       .sort({ createdAt: -1 });
 
     res.json(withdrawals);
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

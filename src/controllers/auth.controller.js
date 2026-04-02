@@ -328,17 +328,6 @@ exports.login = async (req, res) => {
 
     res.cookie("token", token, cookieOptions);
 
-    // res.json({
-    //   message: "Login successful",
-    //   user: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     phone: user.phone,
-    //     email: user.email,
-    //     role: user.role,
-    //     profileImage: user.profileImage,
-    //   },
-    // });
     res.json({
       message: "Login successful",
       token, // 🔥 MUST
@@ -369,13 +358,13 @@ exports.getMe = async (req, res) => {
     const user = await User.findById(req.user._id).select(
       "-password -otpCode -otpExpires -resetOtpCode -resetOtpExpires"
     );
-
     res.json({
       _id: user._id,
       name: user.name,
       phone: user.phone,
       email: user.email,
       role: user.role,
+      sellerStatus: user.sellerStatus, // 🔥 FIX
       profileImage: user.profileImage || "",
     });
   } catch (err) {

@@ -1,7 +1,12 @@
-// src/routes/admin.routes.js
-
 const express = require("express");
 const router = express.Router();
+
+/* ======================================================
+   MIDDLEWARE (🔥 SABSE UPAR)
+====================================================== */
+
+const { adminAuth } = require("../middlewares/admin.middleware");
+const rateLimit = require("express-rate-limit");
 
 /* ======================================================
    CONTROLLERS
@@ -10,13 +15,18 @@ const router = express.Router();
 const {
   adminLogin,
   adminLogout,
-  getAdminDashboard, // 🔥 NEW
-  getPendingSellers, // 🔥 NEXT STEP READY
+  getAdminDashboard,
+  getPendingSellers,
   approveSeller,
   rejectSeller,
   getWithdrawRequests,
   approveWithdraw,
   rejectWithdraw,
+  getAllUsers,
+  toggleBlockUser,
+  enable2FA,
+  verify2FA,
+  getAdminLogs,
 } = require("../controllers/admin.controller");
 
 const {
@@ -28,27 +38,55 @@ const {
   toggleProductActive,
 } = require("../controllers/product.controller");
 
-const {
-  getAllOrders,
-} = require("../controllers/order.controller");
+const { getAllOrders } = require("../controllers/order.controller");
+const { getAdminAnalytics } = require("../controllers/admin.analytics.controller");
 
 /* ======================================================
-   MIDDLEWARE
+   🔐 RATE LIMITERS
 ====================================================== */
 
-const { adminAuth } = require("../middlewares/admin.middleware");
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: {
+    message: "Too many login attempts. Try again later.",
+  },
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: {
+    message: "Too many requests",
+  },
+});
 
 /* ======================================================
-   AUTH
+   🔐 IP WHITELIST
 ====================================================== */
 
-// Login (public)
-router.post("/login", adminLogin);
+const allowedIPs = ["127.0.0.1", "::1"];
 
-// Logout
+const ipWhitelist = (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+
+  if (!allowedIPs.includes(ip)) {
+    return res.status(403).json({
+      message: "Access denied from this IP",
+    });
+  }
+
+  next();
+};
+
+/* ======================================================
+   🔐 PUBLIC ROUTES
+====================================================== */
+
+router.post("/login", loginLimiter, adminLogin);
+
 router.post("/logout", adminAuth, adminLogout);
 
-// Session check
 router.get("/me", adminAuth, (req, res) => {
   res.json({
     message: "Admin authorized",
@@ -57,148 +95,72 @@ router.get("/me", adminAuth, (req, res) => {
 });
 
 /* ======================================================
-   DASHBOARD
+   🔐 PROTECTED ROUTES
 ====================================================== */
 
-router.get("/dashboard", adminAuth, getAdminDashboard);
+router.use(adminAuth, adminLimiter, ipWhitelist);
 
 /* ======================================================
-   ORDERS
+   📊 ANALYTICS
 ====================================================== */
 
-router.get("/orders", adminAuth, getAllOrders);
+router.get("/analytics", getAdminAnalytics);
 
 /* ======================================================
-   PRODUCTS MANAGEMENT
+   🔐 2FA
 ====================================================== */
 
-// All products
-router.get("/products", adminAuth, getAllProductsAdmin);
-
-// Low stock
-router.get("/products/low-stock", adminAuth, getLowStockProducts);
-
-// Pending approval
-router.get("/products/pending", adminAuth, getPendingProducts);
-
-// Approve product
-router.put("/products/:id/approve", adminAuth, approveProduct);
-
-// Toggle active
-router.put("/products/:id/toggle-active", adminAuth, toggleProductActive);
-
-// Delete
-router.delete("/products/:id", adminAuth, deleteProduct);
+router.post("/2fa/enable", enable2FA);
+router.post("/2fa/verify", verify2FA);
 
 /* ======================================================
-   SELLER APPROVAL (🔥 IMPORTANT)
+   📊 LOGS
 ====================================================== */
 
-// Pending sellers
-router.get("/sellers/pending", adminAuth, getPendingSellers);
+router.get("/logs", getAdminLogs);
 
-// Approve seller
-router.put("/sellers/:id/approve", adminAuth, approveSeller);
+/* ======================================================
+   📊 DASHBOARD
+====================================================== */
 
-// Reject seller
-router.put("/sellers/:id/reject", adminAuth, rejectSeller);
+router.get("/dashboard", getAdminDashboard);
 
-router.get("/withdraw-requests", adminAuth, getWithdrawRequests);
+/* ================= USERS ================= */
 
-router.post("/withdraw/approve", adminAuth, approveWithdraw);
+router.get("/users", getAllUsers);
+router.patch("/users/:id/toggle-block", toggleBlockUser);
 
-router.post("/withdraw/reject", adminAuth, rejectWithdraw);
+/* ======================================================
+   📦 ORDERS
+====================================================== */
+
+router.get("/orders", getAllOrders);
+
+/* ======================================================
+   🛍 PRODUCTS
+====================================================== */
+
+router.get("/products", getAllProductsAdmin);
+router.get("/products/low-stock", getLowStockProducts);
+router.get("/products/pending", getPendingProducts);
+router.put("/products/:id/approve", approveProduct);
+router.put("/products/:id/toggle-active", toggleProductActive);
+router.delete("/products/:id", deleteProduct);
+
+/* ======================================================
+   🧑‍💼 SELLERS (OLD SYSTEM - OPTIONAL)
+====================================================== */
+
+router.get("/sellers/pending", getPendingSellers);
+router.put("/sellers/:id/approve", approveSeller);
+router.put("/sellers/:id/reject", rejectSeller);
+
+/* ======================================================
+   💰 WITHDRAWALS
+====================================================== */
+
+router.get("/withdraw-requests", getWithdrawRequests);
+router.post("/withdraw/approve", approveWithdraw);
+router.post("/withdraw/reject", rejectWithdraw);
 
 module.exports = router;
-
-// // src/routes/admin.routes.js
-
-// const express = require("express");
-// const router = express.Router();
-
-// /* ======================================================
-//    CONTROLLERS
-// ====================================================== */
-
-// const {
-//   adminLogin,
-//   adminLogout,
-// } = require("../controllers/admin.controller");
-
-// const {
-//   getLowStockProducts,
-//   getPendingProducts,
-//   approveProduct,
-//   getAllProductsAdmin,
-//   deleteProduct,
-//   toggleProductActive,
-// } = require("../controllers/product.controller");
-
-// const {
-//   getAllOrders,
-// } = require("../controllers/order.controller");
-
-// /* ======================================================
-//    MIDDLEWARE
-// ====================================================== */
-
-// const { adminAuth } = require("../middlewares/admin.middleware");
-
-// /* ======================================================
-//    ADMIN AUTH
-// ====================================================== */
-
-// // Login (public)
-// router.post("/login", adminLogin);
-
-// // Logout (protected)
-// router.post("/logout", adminAuth, adminLogout);
-
-// /* ======================================================
-//    ADMIN SESSION CHECK
-// ====================================================== */
-
-// router.get("/me", adminAuth, (req, res) => {
-//   res.json({
-//     message: "Admin authorized",
-//     admin: req.user,
-//   });
-// });
-
-
-// /* ======================================================
-//    DASHBOARD ROUTES
-// ====================================================== */
-
-// // All Orders (dashboard stats + list)
-// router.get("/orders", adminAuth, getAllOrders);
-
-// // Low Stock Products
-// router.get(
-//   "/products/admin/low-stock",
-//   adminAuth,
-//   getLowStockProducts
-// );
-
-// /* ======================================================
-//    PRODUCT APPROVAL SYSTEM
-// ====================================================== */
-
-// // Get all pending products
-// router.get(
-//   "/products/pending",
-//   adminAuth,
-//   getPendingProducts
-// );
-
-// // Approve product
-// router.put(
-//   "/products/:id/approve",
-//   adminAuth,
-//   approveProduct
-// );
-// router.get("/products", adminAuth, getAllProductsAdmin);
-// router.delete("/products/:id", adminAuth, deleteProduct);
-// router.put("/products/:id/toggle-active", adminAuth, toggleProductActive);
-
-// module.exports = router;

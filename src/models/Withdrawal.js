@@ -19,17 +19,28 @@ const WithdrawalSchema = new mongoose.Schema(
       type: String,
       enum: ["Pending", "Approved", "Rejected"],
       default: "Pending",
+      index: true,
     },
 
     method: {
       type: String,
       enum: ["Bank", "UPI"],
-      default: "UPI",
+      required: true,
     },
 
     accountDetails: {
-      type: Object,
-      default: {},
+      // 🔥 structured instead of loose object
+      upiId: String,
+      bankName: String,
+      accountNumber: String,
+      ifsc: String,
+      accountHolderName: String,
+    },
+
+    // 🔥 unique tracking id (important)
+    requestId: {
+      type: String,
+      unique: true,
     },
 
     processedAt: Date,
@@ -38,6 +49,27 @@ const WithdrawalSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+/* ================= INDEXES ================= */
+
+// fast admin queries
+WithdrawalSchema.index({ status: 1, createdAt: -1 });
+
+// seller history fast
+WithdrawalSchema.index({ seller: 1, createdAt: -1 });
+
+/* ================= AUTO REQUEST ID ================= */
+
+WithdrawalSchema.pre("save", function (next) {
+  if (!this.requestId) {
+    this.requestId =
+      "WD-" +
+      Date.now() +
+      "-" +
+      Math.floor(Math.random() * 1000);
+  }
+  next();
+});
 
 module.exports =
   mongoose.models.Withdrawal ||
