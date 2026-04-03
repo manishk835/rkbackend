@@ -11,21 +11,20 @@ exports.createProduct = async (req, res) => {
     const {
       title,
       price,
+      category,
       subCategory,
-      brand,
       description,
       variants,
-      attributes,
-      tags,
+      attributes = {},
       images,
       thumbnail,
     } = req.body;
 
     /* ================= BASIC VALIDATION ================= */
 
-    if (!title || !price || !description) {
+    if (!title || !price || !category) {
       return res.status(400).json({
-        message: "Required fields missing",
+        message: "Title, price, category required",
       });
     }
 
@@ -35,80 +34,71 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    if (!images || !Array.isArray(images) || images.length === 0) {
+    if (!images || images.length === 0) {
       return res.status(400).json({
-        message: "At least one image required",
+        message: "Images required",
       });
     }
 
-    /* ================= USER BUSINESS TYPE ================= */
-
-    const user = req.user;
-
-    if (!user?.businessType) {
-      return res.status(400).json({
-        message: "Seller business type not set",
-      });
-    }
+    /* ================= CATEGORY ================= */
 
     const categoryDoc = await Category.findOne({
-      slug: user.businessType,
+      slug: category.toLowerCase(),
     });
 
     if (!categoryDoc) {
       return res.status(400).json({
-        message: "Invalid seller category",
+        message: "Invalid category",
       });
     }
 
+    const schema = categoryDoc.attributes || [];
+
     /* ================= ATTRIBUTE VALIDATION ================= */
 
-    const categoryAttributes = categoryDoc.attributes || [];
-
     const productAttributes = {};
-    const variantAttributesList = [];
 
-    categoryAttributes.forEach((attr) => {
-      if (attr.isVariant) {
-        variantAttributesList.push(attr.name);
-      } else {
-        if (attr.isRequired && !attributes?.[attr.name]) {
-          throw new Error(`${attr.displayName} is required`);
-        }
+    schema.forEach((field) => {
+      const value = attributes[field.name];
 
-        if (attributes?.[attr.name]) {
-          productAttributes[attr.name] = attributes[attr.name];
-        }
+      if (field.isRequired && !value) {
+        throw new Error(`${field.displayName} is required`);
+      }
+
+      if (value !== undefined) {
+        productAttributes[field.name] = value;
       }
     });
 
     /* ================= VARIANT VALIDATION ================= */
 
     variants.forEach((v) => {
+      if (!v.name) throw new Error("Variant name required");
       if (!v.sku) throw new Error("SKU required");
 
-      variantAttributesList.forEach((attrName) => {
-        if (!v.attributes || !v.attributes[attrName]) {
-          throw new Error(`Variant missing ${attrName}`);
-        }
-      });
+      // optional variant attributes (future ready)
+      if (v.attributes) {
+        Object.keys(v.attributes).forEach((key) => {
+          if (!v.attributes[key]) {
+            throw new Error(`Variant ${key} missing`);
+          }
+        });
+      }
     });
 
     /* ================= SLUG ================= */
 
-    const baseSlug = title
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-");
-
-    const slug = `${baseSlug}-${Date.now()}`;
+    const slug =
+      title.toLowerCase().replace(/[^a-z0-9]+/g, "-") +
+      "-" +
+      Date.now();
 
     /* ================= STOCK ================= */
 
-    let totalStock = 0;
-    variants.forEach((v) => {
-      totalStock += Number(v.stock) || 0;
-    });
+    const totalStock = variants.reduce(
+      (acc, v) => acc + (Number(v.stock) || 0),
+      0
+    );
 
     /* ================= SKU CHECK ================= */
 
@@ -130,11 +120,8 @@ exports.createProduct = async (req, res) => {
       title,
       slug,
       price,
-
-      category: user.businessType, // ✅ FINAL FIX
-
+      category: category.toLowerCase(),
       subCategory: subCategory?.toLowerCase(),
-      brand: brand?.toLowerCase(),
       description,
 
       attributes: productAttributes,
@@ -143,18 +130,18 @@ exports.createProduct = async (req, res) => {
       totalStock,
       thumbnail: thumbnail || images[0]?.url,
       images,
-      tags,
+
       seller: req.user._id,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Product created",
       product,
     });
 
   } catch (err) {
     console.error("CREATE PRODUCT ERROR:", err);
-    res.status(500).json({
+    return res.status(500).json({
       message: err.message,
     });
   }
