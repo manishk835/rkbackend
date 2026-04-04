@@ -175,7 +175,8 @@ app.use("/api/categories", require("./routes/category.routes"));
 app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/coupons", require("./routes/coupon.routes"));
 app.use("/api/withdrawals", require("./routes/withdrawal.routes"));
-
+app.use("/api/bulk", require("./routes/bulk.routes"));
+app.use("/api/ai", require("./routes/ai.routes"));
 /* ======================================================
    404 HANDLER
 ====================================================== */
