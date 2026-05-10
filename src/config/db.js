@@ -1,46 +1,179 @@
-const mongoose = require("mongoose");
+// src/config/db.js
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      maxPoolSize: 10, // connection pool
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
+const mongoose = require(
+  "mongoose"
+);
 
-    console.log(`🟢 MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error("❌ MongoDB Connection Failed:", error.message);
+/* ======================================================
+   CONNECT DATABASE
+====================================================== */
 
-    // Retry after 5 seconds
-    setTimeout(connectDB, 5000);
-  }
-};
+const connectDB =
+  async () => {
+    try {
+
+      /* ================= URI CHECK ================= */
+
+      if (
+        !process.env
+          .MONGO_URI
+      ) {
+
+        throw new Error(
+          "MONGO_URI missing in environment variables"
+        );
+      }
+
+      /* ================= CONNECTION ================= */
+
+      const conn =
+        await mongoose.connect(
+          process.env
+            .MONGO_URI,
+
+          {
+            maxPoolSize:
+              10,
+
+            serverSelectionTimeoutMS:
+              5000,
+
+            socketTimeoutMS:
+              45000,
+
+            autoIndex:
+              true,
+          }
+        );
+
+      console.log(
+        `🟢 MongoDB Connected: ${conn.connection.host}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "❌ MongoDB Connection Failed:",
+        error.message
+      );
+
+      /* ================= RETRY ================= */
+
+      setTimeout(
+        connectDB,
+        5000
+      );
+    }
+  };
 
 /* ======================================================
    CONNECTION EVENTS
 ====================================================== */
 
-mongoose.connection.on("connected", () => {
-  console.log("📦 MongoDB connection established");
-});
+mongoose.connection.on(
+  "connected",
 
-mongoose.connection.on("error", (err) => {
-  console.error("🔥 MongoDB error:", err);
-});
+  () => {
 
-mongoose.connection.on("disconnected", () => {
-  console.warn("⚠ MongoDB disconnected");
-});
+    console.log(
+      "📦 MongoDB connection established"
+    );
+  }
+);
+
+mongoose.connection.on(
+  "error",
+
+  (err) => {
+
+    console.error(
+      "🔥 MongoDB error:",
+      err.message
+    );
+  }
+);
+
+mongoose.connection.on(
+  "disconnected",
+
+  () => {
+
+    console.warn(
+      "⚠ MongoDB disconnected"
+    );
+  }
+);
+
+mongoose.connection.on(
+  "reconnected",
+
+  () => {
+
+    console.log(
+      "🔄 MongoDB reconnected"
+    );
+  }
+);
+
+/* ======================================================
+   MONGOOSE SETTINGS
+====================================================== */
+
+mongoose.set(
+  "strictQuery",
+  true
+);
 
 /* ======================================================
    GRACEFUL SHUTDOWN
 ====================================================== */
 
-process.on("SIGINT", async () => {
-  await mongoose.connection.close();
-  console.log("🛑 MongoDB connection closed (App terminated)");
-  process.exit(0);
-});
+const gracefulShutdown =
+  async (
+    signal
+  ) => {
+    try {
 
-module.exports = connectDB;
+      await mongoose.connection.close();
+
+      console.log(
+        `🛑 MongoDB connection closed (${signal})`
+      );
+
+      process.exit(0);
+
+    } catch (err) {
+
+      console.error(
+        "Shutdown DB error:",
+        err
+      );
+
+      process.exit(1);
+    }
+  };
+
+process.on(
+  "SIGINT",
+
+  () =>
+    gracefulShutdown(
+      "SIGINT"
+    )
+);
+
+process.on(
+  "SIGTERM",
+
+  () =>
+    gracefulShutdown(
+      "SIGTERM"
+    )
+);
+
+/* ======================================================
+   EXPORT
+====================================================== */
+
+module.exports =
+  connectDB;

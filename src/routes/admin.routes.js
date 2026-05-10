@@ -1,12 +1,22 @@
+// src/routes/admin.routes.js
+
 const express = require("express");
+
 const router = express.Router();
 
 /* ======================================================
-   MIDDLEWARE (🔥 SABSE UPAR)
+   MIDDLEWARES
 ====================================================== */
 
-const { adminAuth } = require("../middlewares/admin.middleware");
-const rateLimit = require("express-rate-limit");
+const rateLimit = require(
+  "express-rate-limit"
+);
+
+const {
+  adminAuth,
+} = require(
+  "../middlewares/admin.middleware"
+);
 
 /* ======================================================
    CONTROLLERS
@@ -15,19 +25,27 @@ const rateLimit = require("express-rate-limit");
 const {
   adminLogin,
   adminLogout,
+
+  enable2FA,
+  verify2FA,
+
+  getAdminLogs,
+
   getAdminDashboard,
+
   getPendingSellers,
   approveSeller,
   rejectSeller,
+
   getWithdrawRequests,
   approveWithdraw,
   rejectWithdraw,
+
   getAllUsers,
   toggleBlockUser,
-  enable2FA,
-  verify2FA,
-  getAdminLogs,
-} = require("../controllers/admin.controller");
+} = require(
+  "../controllers/admin.controller"
+);
 
 const {
   getLowStockProducts,
@@ -36,43 +54,101 @@ const {
   getAllProductsAdmin,
   deleteProduct,
   toggleProductActive,
-} = require("../controllers/product.controller");
+} = require(
+  "../controllers/product.controller"
+);
 
-const { getAllOrders } = require("../controllers/order.controller");
-const { getAdminAnalytics } = require("../controllers/admin.analytics.controller");
+const {
+  getAllOrders,
+} = require(
+  "../controllers/order.controller"
+);
+
+const {
+  getAdminAnalytics,
+} = require(
+  "../controllers/admin.analytics.controller"
+);
 
 /* ======================================================
    🔐 RATE LIMITERS
 ====================================================== */
 
-const loginLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 5,
-  message: {
-    message: "Too many login attempts. Try again later.",
-  },
-});
+const loginLimiter =
+  rateLimit({
+    windowMs:
+      10 * 60 * 1000,
 
-const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: {
-    message: "Too many requests",
-  },
-});
+    max: 5,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many login attempts. Try again later.",
+    },
+  });
+
+const adminLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 200,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many requests",
+    },
+  });
 
 /* ======================================================
-   🔐 IP WHITELIST
+   🔐 OPTIONAL IP WHITELIST
 ====================================================== */
 
-const allowedIPs = ["127.0.0.1", "::1"];
+const allowedIPs = [
+  "127.0.0.1",
+  "::1",
+];
 
-const ipWhitelist = (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
+const ipWhitelist = (
+  req,
+  res,
+  next
+) => {
 
-  if (!allowedIPs.includes(ip)) {
+  /* ================= SKIP IN PRODUCTION ================= */
+
+  if (
+    process.env.NODE_ENV ===
+    "production"
+  ) {
+    return next();
+  }
+
+  const ip =
+    req.ip ||
+    req.connection
+      .remoteAddress;
+
+  if (
+    !allowedIPs.includes(
+      ip
+    )
+  ) {
     return res.status(403).json({
-      message: "Access denied from this IP",
+      message:
+        "Access denied from this IP",
     });
   }
 
@@ -80,87 +156,191 @@ const ipWhitelist = (req, res, next) => {
 };
 
 /* ======================================================
-   🔐 PUBLIC ROUTES
+   🌐 PUBLIC ROUTES
 ====================================================== */
 
-router.post("/login", loginLimiter, adminLogin);
-
-router.post("/logout", adminAuth, adminLogout);
-
-router.get("/me", adminAuth, (req, res) => {
-  res.json({
-    message: "Admin authorized",
-    admin: req.user,
-  });
-});
+/* LOGIN */
+router.post(
+  "/login",
+  loginLimiter,
+  adminLogin
+);
 
 /* ======================================================
-   🔐 PROTECTED ROUTES
+   🔒 AUTH REQUIRED
 ====================================================== */
 
-router.use(adminAuth, adminLimiter, ipWhitelist);
+router.use(adminAuth);
+
+/* LOGOUT */
+router.post(
+  "/logout",
+  adminLogout
+);
+
+/* CURRENT ADMIN */
+router.get(
+  "/me",
+  (req, res) => {
+
+    return res.json({
+      success: true,
+
+      message:
+        "Admin authorized",
+
+      admin: req.user,
+    });
+  }
+);
 
 /* ======================================================
-   📊 ANALYTICS
+   🔐 SECURITY LAYER
 ====================================================== */
 
-router.get("/analytics", getAdminAnalytics);
-
-/* ======================================================
-   🔐 2FA
-====================================================== */
-
-router.post("/2fa/enable", enable2FA);
-router.post("/2fa/verify", verify2FA);
-
-/* ======================================================
-   📊 LOGS
-====================================================== */
-
-router.get("/logs", getAdminLogs);
+router.use(
+  adminLimiter,
+  ipWhitelist
+);
 
 /* ======================================================
    📊 DASHBOARD
 ====================================================== */
 
-router.get("/dashboard", getAdminDashboard);
+router.get(
+  "/dashboard",
+  getAdminDashboard
+);
 
-/* ================= USERS ================= */
+/* ======================================================
+   📈 ANALYTICS
+====================================================== */
 
-router.get("/users", getAllUsers);
-router.patch("/users/:id/toggle-block", toggleBlockUser);
+router.get(
+  "/analytics",
+  getAdminAnalytics
+);
+
+/* ======================================================
+   🔐 2FA
+====================================================== */
+
+router.post(
+  "/2fa/enable",
+  enable2FA
+);
+
+router.post(
+  "/2fa/verify",
+  verify2FA
+);
+
+/* ======================================================
+   📊 LOGS
+====================================================== */
+
+router.get(
+  "/logs",
+  getAdminLogs
+);
+
+/* ======================================================
+   👥 USERS
+====================================================== */
+
+router.get(
+  "/users",
+  getAllUsers
+);
+
+router.patch(
+  "/users/:id/toggle-block",
+  toggleBlockUser
+);
 
 /* ======================================================
    📦 ORDERS
 ====================================================== */
 
-router.get("/orders", getAllOrders);
+router.get(
+  "/orders",
+  getAllOrders
+);
 
 /* ======================================================
    🛍 PRODUCTS
 ====================================================== */
 
-router.get("/products", getAllProductsAdmin);
-router.get("/products/low-stock", getLowStockProducts);
-router.get("/products/pending", getPendingProducts);
-router.put("/products/:id/approve", approveProduct);
-router.put("/products/:id/toggle-active", toggleProductActive);
-router.delete("/products/:id", deleteProduct);
+router.get(
+  "/products",
+  getAllProductsAdmin
+);
+
+router.get(
+  "/products/low-stock",
+  getLowStockProducts
+);
+
+router.get(
+  "/products/pending",
+  getPendingProducts
+);
+
+router.put(
+  "/products/:id/approve",
+  approveProduct
+);
+
+router.put(
+  "/products/:id/toggle-active",
+  toggleProductActive
+);
+
+router.delete(
+  "/products/:id",
+  deleteProduct
+);
 
 /* ======================================================
-   🧑‍💼 SELLERS (OLD SYSTEM - OPTIONAL)
+   🧑‍💼 SELLERS
 ====================================================== */
 
-router.get("/sellers/pending", getPendingSellers);
-router.put("/sellers/:id/approve", approveSeller);
-router.put("/sellers/:id/reject", rejectSeller);
+router.get(
+  "/sellers/pending",
+  getPendingSellers
+);
+
+router.put(
+  "/sellers/:id/approve",
+  approveSeller
+);
+
+router.put(
+  "/sellers/:id/reject",
+  rejectSeller
+);
 
 /* ======================================================
-   💰 WITHDRAWALS
+   💰 WITHDRAW REQUESTS
 ====================================================== */
 
-router.get("/withdraw-requests", getWithdrawRequests);
-router.post("/withdraw/approve", approveWithdraw);
-router.post("/withdraw/reject", rejectWithdraw);
+router.get(
+  "/withdraw-requests",
+  getWithdrawRequests
+);
+
+router.post(
+  "/withdraw/approve",
+  approveWithdraw
+);
+
+router.post(
+  "/withdraw/reject",
+  rejectWithdraw
+);
+
+/* ======================================================
+   EXPORT
+====================================================== */
 
 module.exports = router;

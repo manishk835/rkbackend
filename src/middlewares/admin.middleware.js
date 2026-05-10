@@ -1,53 +1,115 @@
-// middlewares/admin.middleware.js
+// src/middlewares/admin.middleware.js
+
 const jwt = require("jsonwebtoken");
+
 const User = require("../models/User");
 
-exports.adminAuth = async (req, res, next) => {
+/* ======================================================
+   ADMIN AUTH MIDDLEWARE
+====================================================== */
+
+exports.adminAuth = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const token = req.cookies?.token;
+
+    /* ================= TOKEN ================= */
+
+    const token =
+      req.cookies?.admin_token;
 
     if (!token) {
       return res.status(401).json({
-        message: "Authentication required",
+        message:
+          "Authentication required",
       });
     }
+
+    /* ================= VERIFY ================= */
 
     let decoded;
 
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET
+      );
+
     } catch (err) {
+
       return res.status(401).json({
-        message: "Invalid or expired token",
+        message:
+          "Invalid or expired token",
       });
     }
 
-    const user = await User.findById(decoded.id);
+    /* ================= USER ================= */
+
+    const user =
+      await User.findById(
+        decoded.id
+      );
 
     if (!user) {
       return res.status(401).json({
-        message: "User not found",
+        message:
+          "User not found",
       });
     }
 
-    if (user.role !== "admin") {
+    /* ================= ROLE ================= */
+
+    if (
+      user.role !== "admin"
+    ) {
       return res.status(403).json({
-        message: "Admin access required",
+        message:
+          "Admin access required",
       });
     }
 
-    if (decoded.tokenVersion !== user.tokenVersion) {
-      return res.status(401).json({
-        message: "Session expired",
+    /* ================= BLOCK CHECK ================= */
+
+    if (
+      user.isBlocked
+    ) {
+      return res.status(403).json({
+        message:
+          "Admin account blocked",
       });
     }
+
+    /* ================= TOKEN VERSION ================= */
+
+    if (
+      decoded.tokenVersion !==
+      user.tokenVersion
+    ) {
+      return res.status(401).json({
+        message:
+          "Session expired",
+      });
+    }
+
+    /* ================= ATTACH USER ================= */
 
     req.user = user;
+
     next();
 
   } catch (error) {
+
+    console.error(
+      "ADMIN AUTH ERROR:",
+      error
+    );
+
     return res.status(500).json({
-      message: "Authentication failed",
+      message:
+        "Authentication failed",
     });
   }
 };

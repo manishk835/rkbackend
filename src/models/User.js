@@ -5,374 +5,640 @@ const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 const SALT_ROUNDS = 12;
-const OTP_EXPIRE_TIME = 5 * 60 * 1000;
+
+const OTP_EXPIRE_TIME =
+  5 * 60 * 1000;
 
 /* ======================================================
-   WALLET TRANSACTION
+   WALLET TRANSACTION SCHEMA
 ====================================================== */
 
-const walletTxnSchema = new mongoose.Schema(
-  {
-    type: {
-      type: String,
-      enum: ["credit", "debit"],
-      required: true,
+const walletTxnSchema =
+  new mongoose.Schema(
+    {
+      type: {
+        type: String,
+
+        enum: [
+          "credit",
+          "debit",
+        ],
+
+        required: true,
+      },
+
+      amount: {
+        type: Number,
+
+        required: true,
+
+        min: 0,
+      },
+
+      source: {
+        type: String,
+
+        enum: [
+          "order",
+          "withdrawal",
+          "refund",
+          "adjustment",
+        ],
+
+        default:
+          "adjustment",
+      },
+
+      orderId: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+
+        ref: "Order",
+      },
+
+      status: {
+        type: String,
+
+        enum: [
+          "pending",
+          "completed",
+          "failed",
+        ],
+
+        default:
+          "pending",
+      },
+
+      note: {
+        type: String,
+
+        trim: true,
+      },
+
+      createdAt: {
+        type: Date,
+
+        default:
+          Date.now,
+      },
     },
 
-    amount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    source: {
-      type: String,
-      enum: ["order", "withdrawal", "refund", "adjustment"],
-    },
-
-    orderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-    },
-
-    status: {
-      type: String,
-      enum: ["pending", "completed", "failed"],
-      default: "pending",
-    },
-
-    note: String,
-
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { _id: false }
-);
+    {
+      _id: false,
+    }
+  );
 
 /* ======================================================
    USER SCHEMA
 ====================================================== */
 
-const userSchema = new mongoose.Schema(
-  {
-    /* ================= BASIC INFO ================= */
+const userSchema =
+  new mongoose.Schema(
+    {
+      /* ================= BASIC ================= */
 
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-      minlength: 2,
-      maxlength: 100,
-    },
-    profileImage: {
-      type: String,
-      default: "",
-    },
-    // email: {
-    //   type: String,
-    //   required: true,
-    //   unique: true,
-    //   lowercase: true,
-    //   trim: true,
-    //   match: /^\S+@\S+\.\S+$/,
-    // },
-    email: {
-      type: String,
-      unique: true,
-      sparse: true, // ✅ important
-      lowercase: true,
-      trim: true,
-      match: /^\S+@\S+\.\S+$/,
-    },
-    phone: {
-      type: String,
-      trim: true,
-      unique: true,
-      sparse: true,
-      match: /^[6-9]\d{9}$/,
-    },
-
-    password: {
-      type: String,
-      minlength: 8,
-      select: false,
-    },
-
-    /* ================= ROLE ================= */
-
-    role: {
-      type: String,
-      enum: ["user", "seller", "admin"],
-      default: "user",
-    },
-
-    /* ================= GOOGLE ================= */
-
-    googleId: {
-      type: String,
-      sparse: true,
-    },
-
-    /* ======================================================
-     🔥 BUSINESS TYPE (FINAL CORE SYSTEM)
-  ====================================================== */
-
-    businessType: {
-      type: String,
-      enum: ["fashion", "medical", "grocery", "electronics", "general"],
-      default: null,
-      index: true,
-    },
-
-    /* ================= SELLER ================= */
-
-    sellerStatus: {
-      type: String,
-      enum: ["none", "pending", "approved", "rejected"],
-      default: "none",
-      index: true,
-    },
-
-    sellerProfileCompleted: {
-      type: Boolean,
-      default: false,
-    },
-
-    sellerRequestedAt: Date,
-    sellerApprovedAt: Date,
-    sellerRejectedAt: Date,
-
-    sellerInfo: {
-      storeName: {
+      name: {
         type: String,
+
+        required: true,
+
         trim: true,
+
+        minlength: 2,
+
+        maxlength: 100,
       },
-      storeDescription: String,
-      gstNumber: String,
-      panNumber: String,
-    },
 
-    /* ================= WALLET ================= */
+      profileImage: {
+        type: String,
 
-    walletBalance: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    walletTransactions: [walletTxnSchema],
-
-    /* ================= WISHLIST ================= */
-
-    wishlist: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
+        default: "",
       },
-    ],
 
-    /* ================= ACCOUNT ================= */
+      email: {
+        type: String,
 
-    isVerified: {
-      type: Boolean,
-      default: false,
+        unique: true,
+
+        sparse: true,
+
+        lowercase: true,
+
+        trim: true,
+
+        match:
+          /^\S+@\S+\.\S+$/,
+      },
+
+      phone: {
+        type: String,
+
+        trim: true,
+
+        unique: true,
+
+        sparse: true,
+
+        match:
+          /^[6-9]\d{9}$/,
+      },
+
+      password: {
+        type: String,
+
+        minlength: 8,
+
+        select: false,
+      },
+
+      /* ================= ROLE ================= */
+
+      role: {
+        type: String,
+
+        enum: [
+          "user",
+          "seller",
+          "admin",
+        ],
+
+        default: "user",
+
+        index: true,
+      },
+
+      /* ================= GOOGLE ================= */
+
+      googleId: {
+        type: String,
+
+        sparse: true,
+      },
+
+      /* ================= BUSINESS TYPE ================= */
+
+      businessType: {
+        type: String,
+
+        enum: [
+          "fashion",
+          "medical",
+          "grocery",
+          "electronics",
+          "general",
+        ],
+
+        default: null,
+
+        index: true,
+      },
+
+      /* ================= SELLER ================= */
+
+      sellerStatus: {
+        type: String,
+
+        enum: [
+          "none",
+          "pending",
+          "approved",
+          "rejected",
+        ],
+
+        default: "none",
+
+        index: true,
+      },
+
+      sellerProfileCompleted:
+        {
+          type: Boolean,
+
+          default: false,
+        },
+
+      sellerRequestedAt:
+        Date,
+
+      sellerApprovedAt:
+        Date,
+
+      sellerRejectedAt:
+        Date,
+
+      sellerInfo: {
+        storeName: {
+          type: String,
+
+          trim: true,
+        },
+
+        storeDescription:
+          {
+            type: String,
+
+            trim: true,
+          },
+
+        gstNumber: {
+          type: String,
+
+          trim: true,
+        },
+
+        panNumber: {
+          type: String,
+
+          trim: true,
+        },
+      },
+
+      /* ================= WALLET ================= */
+
+      walletBalance: {
+        type: Number,
+
+        default: 0,
+
+        min: 0,
+      },
+
+      walletTransactions:
+        [
+          walletTxnSchema,
+        ],
+
+      /* ================= WISHLIST ================= */
+
+      wishlist: [
+        {
+          type:
+            mongoose.Schema.Types.ObjectId,
+
+          ref: "Product",
+        },
+      ],
+
+      /* ================= ACCOUNT ================= */
+
+      isVerified: {
+        type: Boolean,
+
+        default: false,
+      },
+
+      isBlocked: {
+        type: Boolean,
+
+        default: false,
+      },
+
+      /* ================= OTP ================= */
+
+      otpCode: String,
+
+      otpExpires: Date,
+
+      otpAttempts: {
+        type: Number,
+
+        default: 0,
+      },
+
+      /* ================= LOGIN SECURITY ================= */
+
+      failedLoginAttempts:
+        {
+          type: Number,
+
+          default: 0,
+        },
+
+      lockUntil: Date,
+
+      lastLogin: Date,
+
+      tokenVersion: {
+        type: Number,
+
+        default: 0,
+      },
+
+      /* ================= 2FA ================= */
+
+      twoFactorEnabled:
+        {
+          type: Boolean,
+
+          default: false,
+        },
+
+      twoFactorSecret:
+        {
+          type: String,
+        },
+
+      /* ================= RESET PASSWORD ================= */
+
+      resetOtpCode:
+        String,
+
+      resetOtpExpires:
+        Date,
+
+      resetOtpAttempts:
+        {
+          type: Number,
+
+          default: 0,
+        },
+
+      resetPasswordAllowed:
+        {
+          type: Boolean,
+
+          default: false,
+        },
     },
 
-    isBlocked: {
-      type: Boolean,
-      default: false,
-    },
-
-    /* ================= OTP ================= */
-
-    otpCode: String,
-    otpExpires: Date,
-    otpAttempts: {
-      type: Number,
-      default: 0,
-    },
-
-    /* ================= LOGIN ================= */
-
-    failedLoginAttempts: {
-      type: Number,
-      default: 0,
-    },
-
-    lockUntil: Date,
-    lastLogin: Date,
-
-    tokenVersion: {
-      type: Number,
-      default: 0,
-    },
-    twoFactorEnabled: {
-      type: Boolean,
-      default: false,
-    },
-    twoFactorSecret: {
-      type: String, // base32 secret
-    },
-    /* ================= RESET ================= */
-
-    resetOtpCode: String,
-    resetOtpExpires: Date,
-    resetOtpAttempts: {
-      type: Number,
-      default: 0,
-    },
-
-    resetPasswordAllowed: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  { timestamps: true }
-
-);
+    {
+      timestamps: true,
+    }
+  );
 
 /* ======================================================
    INDEXES
 ====================================================== */
 
-userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ sellerStatus: 1 });
-userSchema.index({ businessType: 1 });
-userSchema.index({ createdAt: -1 });
+userSchema.index({
+  email: 1,
+});
+
+userSchema.index({
+  role: 1,
+});
+
+userSchema.index({
+  sellerStatus: 1,
+});
+
+userSchema.index({
+  businessType: 1,
+});
+
+userSchema.index({
+  createdAt: -1,
+});
 
 /* ======================================================
    PASSWORD HASH
 ====================================================== */
 
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+userSchema.pre(
+  "save",
 
-  const salt = await bcrypt.genSalt(SALT_ROUNDS);
-  this.password = await bcrypt.hash(this.password, salt);
-});
+  async function () {
 
-/* ======================================================
-   WALLET METHODS
-====================================================== */
+    if (
+      !this.isModified(
+        "password"
+      )
+    ) {
+      return;
+    }
 
-userSchema.methods.creditWallet = async function ({
-  amount,
-  source = "order",
-  orderId,
-  note,
-}) {
-  this.walletBalance += amount;
+    const salt =
+      await bcrypt.genSalt(
+        SALT_ROUNDS
+      );
 
-  this.walletTransactions.push({
-    type: "credit",
-    amount,
-    source,
-    orderId,
-    note,
-    status: "completed",
-  });
-
-  await this.save();
-};
-
-userSchema.methods.debitWallet = async function ({
-  amount,
-  source = "withdrawal",
-  note,
-}) {
-  if (this.walletBalance < amount) {
-    throw new Error("Insufficient balance");
+    this.password =
+      await bcrypt.hash(
+        this.password,
+        salt
+      );
   }
-
-  this.walletBalance -= amount;
-
-  this.walletTransactions.push({
-    type: "debit",
-    amount,
-    source,
-    note,
-    status: "completed",
-  });
-
-  await this.save();
-};
+);
 
 /* ======================================================
    PASSWORD COMPARE
 ====================================================== */
 
-userSchema.methods.comparePassword = function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
+userSchema.methods.comparePassword =
+  function (
+    candidatePassword
+  ) {
+
+    return bcrypt.compare(
+      candidatePassword,
+      this.password
+    );
+  };
+
+/* ======================================================
+   WALLET METHODS
+====================================================== */
+
+userSchema.methods.creditWallet =
+  async function ({
+    amount,
+    source = "order",
+    orderId,
+    note,
+  }) {
+
+    this.walletBalance +=
+      amount;
+
+    this.walletTransactions.push(
+      {
+        type:
+          "credit",
+
+        amount,
+
+        source,
+
+        orderId,
+
+        note,
+
+        status:
+          "completed",
+      }
+    );
+
+    await this.save();
+  };
+
+userSchema.methods.debitWallet =
+  async function ({
+    amount,
+    source =
+      "withdrawal",
+    note,
+  }) {
+
+    if (
+      this.walletBalance <
+      amount
+    ) {
+      throw new Error(
+        "Insufficient balance"
+      );
+    }
+
+    this.walletBalance -=
+      amount;
+
+    this.walletTransactions.push(
+      {
+        type:
+          "debit",
+
+        amount,
+
+        source,
+
+        note,
+
+        status:
+          "completed",
+      }
+    );
+
+    await this.save();
+  };
 
 /* ======================================================
    OTP METHODS
 ====================================================== */
 
-userSchema.methods.generateOTP = function () {
+userSchema.methods.generateOTP =
+  function () {
 
-  // 🚫 prevent spam (30 sec rule)
-  if (this.otpExpires && this.otpExpires > Date.now() - 30000) {
-    throw new Error("OTP already sent. Please wait");
-  }
+    if (
+      this.otpExpires &&
+      this.otpExpires >
+        Date.now() -
+          30000
+    ) {
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      throw new Error(
+        "OTP already sent. Please wait"
+      );
+    }
 
-  const hash = crypto.createHash("sha256").update(otp).digest("hex");
+    const otp =
+      Math.floor(
+        100000 +
+          Math.random() *
+            900000
+      ).toString();
 
-  this.otpCode = hash;
-  this.otpExpires = Date.now() + OTP_EXPIRE_TIME;
-  this.otpAttempts = 0;
+    const hash =
+      crypto
+        .createHash(
+          "sha256"
+        )
+        .update(otp)
+        .digest("hex");
 
-  return otp;
-};
+    this.otpCode =
+      hash;
 
-userSchema.methods.verifyOTP = function (otp) {
+    this.otpExpires =
+      Date.now() +
+      OTP_EXPIRE_TIME;
 
-  // 🚫 expired
-  if (!this.otpExpires || this.otpExpires < Date.now()) {
-    return false;
-  }
+    this.otpAttempts = 0;
 
-  // 🚫 too many attempts
-  if (this.otpAttempts >= 5) {
-    return false;
-  }
+    return otp;
+  };
 
-  const hash = crypto.createHash("sha256").update(otp).digest("hex");
+userSchema.methods.verifyOTP =
+  function (otp) {
 
-  const isValid = this.otpCode === hash;
+    if (
+      !this.otpExpires ||
+      this.otpExpires <
+        Date.now()
+    ) {
+      return false;
+    }
 
-  if (!isValid) {
-    this.otpAttempts += 1;
-  }
+    if (
+      this.otpAttempts >=
+      5
+    ) {
+      return false;
+    }
 
-  return isValid;
-};
+    const hash =
+      crypto
+        .createHash(
+          "sha256"
+        )
+        .update(otp)
+        .digest("hex");
+
+    const isValid =
+      this.otpCode ===
+      hash;
+
+    if (!isValid) {
+      this.otpAttempts += 1;
+    }
+
+    return isValid;
+  };
 
 /* ======================================================
    LOGIN HANDLERS
 ====================================================== */
 
-userSchema.methods.handleFailedLogin = async function () {
-  this.failedLoginAttempts += 1;
+userSchema.methods.handleFailedLogin =
+  async function () {
 
-  if (this.failedLoginAttempts >= 5) {
-    this.lockUntil = Date.now() + 15 * 60 * 1000;
-  }
+    this.failedLoginAttempts += 1;
 
-  await this.save();
-};
+    if (
+      this
+        .failedLoginAttempts >=
+      5
+    ) {
 
-userSchema.methods.handleLoginSuccess = async function () {
-  this.failedLoginAttempts = 0;
-  this.lockUntil = undefined;
-  this.lastLogin = new Date();
+      this.lockUntil =
+        Date.now() +
+        15 *
+          60 *
+          1000;
+    }
 
-  await this.save();
-};
+    await this.save();
+  };
 
-module.exports = mongoose.model("User", userSchema);
+userSchema.methods.handleLoginSuccess =
+  async function () {
+
+    this.failedLoginAttempts = 0;
+
+    this.lockUntil =
+      undefined;
+
+    this.lastLogin =
+      new Date();
+
+    await this.save();
+  };
+
+/* ======================================================
+   EXPORT
+====================================================== */
+
+module.exports =
+  mongoose.models.User ||
+  mongoose.model(
+    "User",
+    userSchema
+  );

@@ -1,17 +1,32 @@
 // src/routes/seller.routes.js
 
 const express = require("express");
+
 const router = express.Router();
+
+/* ======================================================
+   CONTROLLERS
+====================================================== */
 
 const {
   getSellerProducts,
+  getSingleSellerProduct,
   getSellerOrders,
   getSellerDashboard,
+  getSellerAnalytics,
+  getLowStockProducts,
+
   updateSellerProduct,
   deleteSellerProduct,
-  getWalletTransactions,   // 🔥 NEW
-  withdrawFromWallet,      // 🔥 NEW
+  toggleSellerProductStatus,
+
+  getWalletTransactions,
+  withdrawFromWallet,
 } = require("../controllers/seller.controller");
+
+/* ======================================================
+   MIDDLEWARES
+====================================================== */
 
 const {
   protect,
@@ -20,7 +35,7 @@ const {
 } = require("../middlewares/auth.middleware");
 
 /* ======================================================
-   SELLER ACCESS MIDDLEWARE
+   SELLER ACCESS
 ====================================================== */
 
 const sellerAccess = [
@@ -29,95 +44,98 @@ const sellerAccess = [
   approvedSeller,
 ];
 
-/* ================= SELLER DASHBOARD ================= */
+/* ======================================================
+   DASHBOARD
+====================================================== */
 
-router.get("/dashboard", sellerAccess, getSellerDashboard);
+router.get(
+  "/dashboard",
+  sellerAccess,
+  getSellerDashboard
+);
 
-/* ================= SELLER PRODUCTS ================= */
+/* ======================================================
+   ANALYTICS
+====================================================== */
 
-router.get("/products", sellerAccess, getSellerProducts);
+router.get(
+  "/analytics",
+  sellerAccess,
+  getSellerAnalytics
+);
 
-router.put("/products/:id", sellerAccess, updateSellerProduct);
+/* ======================================================
+   PRODUCTS
+====================================================== */
 
-router.delete("/products/:id", sellerAccess, deleteSellerProduct);
+/* ALL PRODUCTS */
+router.get(
+  "/products",
+  sellerAccess,
+  getSellerProducts
+);
 
-/* ================= SELLER ORDERS ================= */
+/* LOW STOCK */
+router.get(
+  "/products/low-stock",
+  sellerAccess,
+  getLowStockProducts
+);
 
-router.get("/orders", sellerAccess, getSellerOrders);
+/* SINGLE PRODUCT */
+router.get(
+  "/products/:id",
+  sellerAccess,
+  getSingleSellerProduct
+);
 
-/* ================= WALLET ================= */
+/* UPDATE PRODUCT */
+router.put(
+  "/products/:id",
+  sellerAccess,
+  updateSellerProduct
+);
 
-// 🔥 Get wallet transactions
-router.get("/wallet", sellerAccess, getWalletTransactions);
+/* TOGGLE ACTIVE STATUS */
+router.patch(
+  "/products/:id/toggle",
+  sellerAccess,
+  toggleSellerProductStatus
+);
 
-// 🔥 Withdraw money
-router.post("/wallet/withdraw", sellerAccess, withdrawFromWallet);
+/* DELETE PRODUCT */
+router.delete(
+  "/products/:id",
+  sellerAccess,
+  deleteSellerProduct
+);
+
+/* ======================================================
+   ORDERS
+====================================================== */
+
+router.get(
+  "/orders",
+  sellerAccess,
+  getSellerOrders
+);
+
+/* ======================================================
+   WALLET
+====================================================== */
+
+/* GET WALLET */
+router.get(
+  "/wallet",
+  sellerAccess,
+  getWalletTransactions
+);
+
+/* WITHDRAW */
+router.post(
+  "/wallet/withdraw",
+  sellerAccess,
+  withdrawFromWallet
+);
 
 module.exports = router;
-
-// // // src/routes/seller.routes.js
-// const express = require("express");
-// const router = express.Router();
-
-// const {
-//   getSellerProducts,
-//   getSellerOrders,
-//   getSellerDashboard,
-//   updateSellerProduct,
-//   deleteSellerProduct,
-// } = require("../controllers/seller.controller");
-
-// const {
-//   protect,
-//   requireRole,
-//   approvedSeller,
-// } = require("../middlewares/auth.middleware");
-
-// /* ======================================================
-//    SELLER ACCESS MIDDLEWARE
-// ====================================================== */
-
-// const sellerAccess = [
-//   protect,
-//   requireRole("seller"),
-//   approvedSeller,
-// ];
-
-// /* ================= SELLER DASHBOARD ================= */
-
-// router.get(
-//   "/dashboard",
-//   sellerAccess,
-//   getSellerDashboard
-// );
-
-// /* ================= SELLER PRODUCTS ================= */
-
-// router.get(
-//   "/products",
-//   sellerAccess,
-//   getSellerProducts
-// );
-
-// router.put(
-//   "/products/:id",
-//   sellerAccess,
-//   updateSellerProduct
-// );
-
-// router.delete(
-//   "/products/:id",
-//   sellerAccess,
-//   deleteSellerProduct
-// );
-
-// /* ================= SELLER ORDERS ================= */
-
-// router.get(
-//   "/orders",
-//   sellerAccess,
-//   getSellerOrders
-// );
-
-// module.exports = router;
-

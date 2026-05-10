@@ -1,5 +1,12 @@
+// src/routes/cart.routes.js
+
 const express = require("express");
+
 const router = express.Router();
+
+/* ======================================================
+   CONTROLLERS
+====================================================== */
 
 const {
   getCart,
@@ -7,20 +14,133 @@ const {
   updateCartItem,
   removeItem,
   clearCart,
-} = require("../controllers/cart.controller");
+} = require(
+  "../controllers/cart.controller"
+);
 
-const { protect } = require("../middlewares/auth.middleware");
+/* ======================================================
+   MIDDLEWARES
+====================================================== */
 
-/* ================= CART ================= */
+const {
+  protect,
+} = require(
+  "../middlewares/auth.middleware"
+);
 
-router.get("/", protect, getCart);
+const rateLimit = require(
+  "express-rate-limit"
+);
 
-router.post("/add", protect, addToCart);
+/* ======================================================
+   RATE LIMITERS
+====================================================== */
 
-router.put("/update", protect, updateCartItem);
+const cartLimiter =
+  rateLimit({
+    windowMs:
+      10 * 60 * 1000,
 
-router.delete("/remove", protect, removeItem);
+    max: 100,
 
-router.delete("/clear", protect, clearCart);
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many cart requests. Please try again later.",
+    },
+  });
+
+/* ======================================================
+   ALL CART ROUTES REQUIRE LOGIN
+====================================================== */
+
+router.use(
+  protect,
+  cartLimiter
+);
+
+/* ======================================================
+   GET CART
+====================================================== */
+
+/*
+GET
+/api/cart
+*/
+
+router.get(
+  "/",
+
+  getCart
+);
+
+/* ======================================================
+   ADD TO CART
+====================================================== */
+
+/*
+POST
+/api/cart/add
+*/
+
+router.post(
+  "/add",
+
+  addToCart
+);
+
+/* ======================================================
+   UPDATE CART ITEM
+====================================================== */
+
+/*
+PUT
+/api/cart/update
+*/
+
+router.put(
+  "/update",
+
+  updateCartItem
+);
+
+/* ======================================================
+   REMOVE ITEM
+====================================================== */
+
+/*
+DELETE
+/api/cart/remove
+*/
+
+router.delete(
+  "/remove",
+
+  removeItem
+);
+
+/* ======================================================
+   CLEAR CART
+====================================================== */
+
+/*
+DELETE
+/api/cart/clear
+*/
+
+router.delete(
+  "/clear",
+
+  clearCart
+);
+
+/* ======================================================
+   EXPORT
+====================================================== */
 
 module.exports = router;

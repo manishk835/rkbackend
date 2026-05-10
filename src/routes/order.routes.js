@@ -1,10 +1,14 @@
 // src/routes/order.routes.js
+
 const express = require("express");
+
 const router = express.Router();
+
 const {
   createOrder,
   getAllOrders,
   getUserOrders,
+  getOrderById,
   updateOrderStatus,
   getOrderByIdAdmin,
   exportOrdersCSV,
@@ -13,30 +17,133 @@ const {
   downloadInvoice,
   createRazorpayOrder,
   verifyRazorpayPayment,
+  refundPayment,
+  getPaymentAnalytics,
 } = require("../controllers/order.controller");
 
-const { protect } = require("../middlewares/auth.middleware");
-const { adminAuth } = require("../middlewares/admin.middleware");
+const {
+  protect,
+} = require("../middlewares/auth.middleware");
 
+const {
+  adminAuth,
+} = require("../middlewares/admin.middleware");
 
-/* ================= USER ROUTES ================= */
+/* ======================================================
+   USER ROUTES
+====================================================== */
 
-router.post("/", protect, createOrder);
-router.get("/my", protect, getUserOrders);
-router.put("/:id/cancel", protect, cancelOrder);
-router.put("/:id/return", protect, requestReturn);
-router.get("/:id/invoice", protect, downloadInvoice);
+/* CREATE ORDER */
+router.post(
+  "/",
+  protect,
+  createOrder
+);
 
-router.post("/razorpay/create", protect, createRazorpayOrder);
-router.post("/razorpay/verify", protect, verifyRazorpayPayment);
+/* MY ORDERS */
+router.get(
+  "/my",
+  protect,
+  getUserOrders
+);
 
+/* SINGLE ORDER */
+router.get(
+  "/:id",
+  protect,
+  getOrderById
+);
 
-/* ================= ADMIN ROUTES ================= */
+/* CANCEL ORDER */
+router.put(
+  "/:id/cancel",
+  protect,
+  cancelOrder
+);
 
-router.get("/export/csv", adminAuth, exportOrdersCSV);
-router.get("/admin/:id", adminAuth, getOrderByIdAdmin);
-router.get("/", adminAuth, getAllOrders);
-router.put("/:id/status", adminAuth, updateOrderStatus);
-router.put("/:id", adminAuth, updateOrderStatus);
+/* RETURN ORDER */
+router.put(
+  "/:id/return",
+  protect,
+  requestReturn
+);
+
+/* DOWNLOAD INVOICE */
+router.get(
+  "/:id/invoice",
+  protect,
+  downloadInvoice
+);
+
+/* ======================================================
+   RAZORPAY
+====================================================== */
+
+/* CREATE PAYMENT ORDER */
+router.post(
+  "/razorpay/create",
+  protect,
+  createRazorpayOrder
+);
+
+/* VERIFY PAYMENT */
+router.post(
+  "/razorpay/verify",
+  protect,
+  verifyRazorpayPayment
+);
+
+/* ======================================================
+   ADMIN ROUTES
+====================================================== */
+
+/* EXPORT CSV */
+router.get(
+  "/export/csv",
+  adminAuth,
+  exportOrdersCSV
+);
+
+/* PAYMENT ANALYTICS */
+router.get(
+  "/analytics/payments",
+  adminAuth,
+  getPaymentAnalytics
+);
+
+/* SINGLE ORDER */
+router.get(
+  "/admin/:id",
+  adminAuth,
+  getOrderByIdAdmin
+);
+
+/* ALL ORDERS */
+router.get(
+  "/",
+  adminAuth,
+  getAllOrders
+);
+
+/* UPDATE STATUS */
+router.put(
+  "/:id/status",
+  adminAuth,
+  updateOrderStatus
+);
+
+/* BACKWARD SUPPORT */
+router.put(
+  "/:id",
+  adminAuth,
+  updateOrderStatus
+);
+
+/* MANUAL REFUND */
+router.post(
+  "/refund",
+  adminAuth,
+  refundPayment
+);
 
 module.exports = router;

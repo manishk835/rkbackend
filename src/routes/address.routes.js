@@ -1,35 +1,74 @@
-// routes/address.routes.js
+// src/routes/address.routes.js
 
 const express = require("express");
+
 const router = express.Router();
+
+/* ======================================================
+   CONTROLLERS
+====================================================== */
 
 const {
   createAddress,
   getUserAddresses,
+  getSingleAddress,
   updateAddress,
   deleteAddress,
   setDefaultAddress,
 } = require("../controllers/address.controller");
 
-const { protect } = require("../middlewares/auth.middleware");
-
 /* ======================================================
-   ALL ROUTES PROTECTED (USER LOGIN REQUIRED)
+   MIDDLEWARES
 ====================================================== */
 
-// ➕ Create new address
-router.post("/", protect, createAddress);
+const {
+  protect,
+} = require("../middlewares/auth.middleware");
 
-// 📦 Get all user addresses
-router.get("/", protect, getUserAddresses);
+/* ======================================================
+   PROTECTED ROUTES
+====================================================== */
 
-// ✏️ Update address
-router.put("/:id", protect, updateAddress);
+/* CREATE ADDRESS */
+router.post(
+  "/",
+  protect,
+  createAddress
+);
 
-// ❌ Delete address
-router.delete("/:id", protect, deleteAddress);
+/* GET ALL USER ADDRESSES */
+router.get(
+  "/",
+  protect,
+  getUserAddresses
+);
 
-// ⭐ Set default address
-router.patch("/:id/default", protect, setDefaultAddress);
+/* GET SINGLE ADDRESS */
+router.get(
+  "/:id",
+  protect,
+  getSingleAddress
+);
+
+/* UPDATE ADDRESS */
+router.put(
+  "/:id",
+  protect,
+  updateAddress
+);
+
+/* DELETE ADDRESS */
+router.delete(
+  "/:id",
+  protect,
+  deleteAddress
+);
+
+/* SET DEFAULT ADDRESS */
+router.patch(
+  "/:id/default",
+  protect,
+  setDefaultAddress
+);
 
 module.exports = router;

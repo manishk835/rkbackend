@@ -1,14 +1,24 @@
 // controllers/admin.controller.js
-// 🔥 required imports (top of file)
+
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Order = require("../models/Order");
 const AdminLog = require("../models/AdminLog");
+
 const speakeasy = require("speakeasy");
 const QRCode = require("qrcode");
 const nodemailer = require("nodemailer");
 
 /* ======================================================
-   🔐 MAIL TRANSPORT (LOGIN ALERT)
+   ENV CHECK
+====================================================== */
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET missing");
+}
+
+/* ======================================================
+   🔐 MAIL TRANSPORT
 ====================================================== */
 
 const transporter = nodemailer.createTransport({
@@ -31,12 +41,27 @@ const generateToken = (admin) => {
       tokenVersion: admin.tokenVersion,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "1d" }
+    {
+      expiresIn: "1d",
+    }
   );
 };
 
 /* ======================================================
-   🔐 ADMIN LOGIN (FINAL SECURE)
+   🍪 ADMIN COOKIE
+====================================================== */
+
+const setAdminCookie = (res, token) => {
+  res.cookie("admin_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+};
+
+/* ======================================================
+   🔐 ADMIN LOGIN
 ====================================================== */
 
 const adminLogin = async (req, res) => {
@@ -49,7 +74,9 @@ const adminLogin = async (req, res) => {
       });
     }
 
-    const admin = await User.findOne({ email }).select("+password");
+    const admin = await User.findOne({
+      email: email.toLowerCase(),
+    }).select("+password");
 
     if (!admin || admin.role !== "admin") {
       return res.status(401).json({
@@ -71,11 +98,11 @@ const adminLogin = async (req, res) => {
       });
     }
 
-    /* ================= 2FA CHECK ================= */
+    /* ================= 2FA ================= */
 
     if (admin.twoFactorEnabled) {
       if (!otp) {
-        return res.status(200).json({
+        return res.status(401).json({
           require2FA: true,
           message: "OTP required",
         });
@@ -96,32 +123,48 @@ const adminLogin = async (req, res) => {
 
     /* ================= TOKEN ================= */
 
-    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+    admin.tokenVersion =
+      (admin.tokenVersion || 0) + 1;
+
     await admin.save();
 
     const token = generateToken(admin);
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    setAdminCookie(res, token);
 
     /* ================= LOGIN ALERT ================= */
+
+    const ip =
+      req.headers["x-forwarded-for"] ||
+      req.socket.remoteAddress ||
+      req.ip;
 
     try {
       await transporter.sendMail({
         to: admin.email,
         subject: "Admin Login Alert",
         html: `
-          <h3>New Admin Login</h3>
-          <p><b>IP:</b> ${req.ip}</p>
-          <p><b>Time:</b> ${new Date().toLocaleString()}</p>
+          <h2>New Admin Login</h2>
+
+          <p>
+            A new admin login was detected.
+          </p>
+
+          <p>
+            <b>IP:</b> ${ip}
+          </p>
+
+          <p>
+            <b>Time:</b>
+            ${new Date().toLocaleString()}
+          </p>
         `,
       });
     } catch (err) {
-      console.error("Email alert failed", err);
+      console.error(
+        "Email alert failed:",
+        err.message
+      );
     }
 
     /* ================= AUDIT LOG ================= */
@@ -129,18 +172,59 @@ const adminLogin = async (req, res) => {
     await AdminLog.create({
       admin: admin._id,
       action: "Admin Login",
-      ip: req.ip,
+      ip,
       userAgent: req.headers["user-agent"],
     });
 
     return res.json({
+      success: true,
       message: "Admin login successful",
     });
   } catch (error) {
-    console.error("ADMIN LOGIN ERROR:", error);
+    console.error(
+      "ADMIN LOGIN ERROR:",
+      error
+    );
 
     return res.status(500).json({
       message: "Login failed",
+    });
+  }
+};
+
+/* ======================================================
+   🔐 ADMIN LOGOUT
+====================================================== */
+
+const adminLogout = async (req, res) => {
+  try {
+    const user = await User.findById(
+      req.user._id
+    );
+
+    if (user) {
+      user.tokenVersion += 1;
+      await user.save();
+    }
+
+    res.cookie("admin_token", "", {
+      httpOnly: true,
+      expires: new Date(0),
+      sameSite: "strict",
+    });
+
+    return res.json({
+      success: true,
+      message: "Admin logged out",
+    });
+  } catch (error) {
+    console.error(
+      "Logout Error:",
+      error
+    );
+
+    return res.status(500).json({
+      message: "Logout failed",
     });
   }
 };
@@ -151,22 +235,39 @@ const adminLogin = async (req, res) => {
 
 const enable2FA = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(
+      req.user._id
+    );
 
-    const secret = speakeasy.generateSecret({
-      name: `RK Fashion (${user.email})`,
-    });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const secret =
+      speakeasy.generateSecret({
+        name: `RK Fashion (${user.email})`,
+      });
 
     user.twoFactorSecret = secret.base32;
+
     await user.save();
 
-    const qr = await QRCode.toDataURL(secret.otpauth_url);
+    const qr = await QRCode.toDataURL(
+      secret.otpauth_url
+    );
 
     return res.json({
       qr,
       secret: secret.base32,
     });
   } catch (err) {
+    console.error(
+      "Enable 2FA Error:",
+      err
+    );
+
     return res.status(500).json({
       message: "Failed to enable 2FA",
     });
@@ -181,7 +282,15 @@ const verify2FA = async (req, res) => {
   try {
     const { token } = req.body;
 
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(
+      req.user._id
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
     const verified = speakeasy.totp({
       secret: user.twoFactorSecret,
@@ -196,69 +305,21 @@ const verify2FA = async (req, res) => {
     }
 
     user.twoFactorEnabled = true;
+
     await user.save();
 
     return res.json({
+      success: true,
       message: "2FA enabled successfully",
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      "Verify 2FA Error:",
+      err
+    );
+
     return res.status(500).json({
       message: "2FA verification failed",
-    });
-  }
-};
-
-/* ======================================================
-   📊 ADMIN LOGS
-====================================================== */
-
-const getAdminLogs = async (req, res) => {
-  try {
-    const logs = await AdminLog.find()
-      .populate("admin", "email")
-      .sort({ createdAt: -1 })
-      .limit(100);
-
-    return res.json(logs);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to fetch logs",
-    });
-  }
-};
-
-/* ======================================================
-   EXPORTS
-====================================================== */
-
-/* ======================================================
-   🔐 ADMIN LOGOUT (SECURE)
-====================================================== */
-
-const adminLogout = async (req, res) => {
-  try {
-    // 🔥 invalidate all sessions
-    const user = await User.findById(req.user._id);
-
-    if (user) {
-      user.tokenVersion += 1;
-      await user.save();
-    }
-
-    res.cookie("token", "", {
-      httpOnly: true,
-      expires: new Date(0),
-      sameSite: "strict",
-    });
-
-    return res.json({
-      message: "Admin logged out",
-    });
-  } catch (error) {
-    console.error("Logout Error:", error);
-
-    return res.status(500).json({
-      message: "Logout failed",
     });
   }
 };
@@ -267,85 +328,103 @@ const adminLogout = async (req, res) => {
    📊 ADMIN DASHBOARD
 ====================================================== */
 
-const Order = require("../models/Order");
-
-const getAdminDashboard = async (req, res) => {
+const getAdminDashboard = async (
+  req,
+  res
+) => {
   try {
-    console.log("📊 Dashboard API hit");
+    const totalUsers =
+      await User.countDocuments({
+        role: "user",
+      });
 
-    /* ================= USERS ================= */
+    const totalSellers =
+      await User.countDocuments({
+        role: "seller",
+        sellerStatus: "approved",
+      });
 
-    const totalUsers = await User.countDocuments({ role: "user" });
-    const totalSellers = await User.countDocuments({
-      role: "seller",
-      sellerStatus: "approved",
-    });
-    const pendingSellers = await User.countDocuments({
-      role: "seller",
-      sellerStatus: "pending",
-    });
+    const pendingSellers =
+      await User.countDocuments({
+        role: "seller",
+        sellerStatus: "pending",
+      });
 
-    /* ================= ORDERS ================= */
+    const totalOrders =
+      await Order.countDocuments();
 
-    const totalOrders = await Order.countDocuments();
-    const pendingOrders = await Order.countDocuments({
-      status: { $in: ["Pending", "Confirmed", "Packed"] },
-    });
+    const pendingOrders =
+      await Order.countDocuments({
+        status: {
+          $in: [
+            "Pending",
+            "Confirmed",
+            "Packed",
+          ],
+        },
+      });
 
     /* ================= REVENUE ================= */
 
     let totalRevenue = 0;
 
-    try {
-      const revenueAgg = await Order.aggregate([
-        { $match: { status: "Delivered" } },
+    const revenueAgg =
+      await Order.aggregate([
+        {
+          $match: {
+            status: "Delivered",
+          },
+        },
         {
           $group: {
             _id: null,
-            total: { $sum: "$totalAmount" },
+            total: {
+              $sum: "$totalAmount",
+            },
           },
         },
       ]);
 
-      if (revenueAgg.length > 0) {
-        totalRevenue = revenueAgg[0].total;
-      }
-    } catch (err) {
-      console.error("❌ Revenue error:", err.message);
+    if (revenueAgg.length > 0) {
+      totalRevenue =
+        revenueAgg[0].total;
     }
 
     /* ================= CHART ================= */
 
-    let chartData = [];
+    const orders = await Order.find()
+      .select("createdAt")
+      .sort({ createdAt: 1 })
+      .limit(15);
 
-    try {
-      const orders = await Order.find()
-        .select("createdAt")
-        .sort({ createdAt: 1 })
-        .limit(15);
-
-      chartData = orders.map((o) => ({
-        date: o.createdAt.toISOString().split("T")[0],
+    const chartData = orders.map(
+      (o) => ({
+        date:
+          o.createdAt
+            .toISOString()
+            .split("T")[0],
         orders: 1,
-      }));
-    } catch (err) {
-      console.error("❌ Chart error:", err.message);
-    }
-
-    /* ================= RESPONSE ================= */
+      })
+    );
 
     return res.json({
       success: true,
+
       totalUsers,
       totalSellers,
       pendingSellers,
+
       totalOrders,
       pendingOrders,
+
       totalRevenue,
       chartData,
     });
   } catch (error) {
-    console.error("🔥 Dashboard CRASH:", error);
+    console.error(
+      "Dashboard Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Dashboard failed",
@@ -354,21 +433,31 @@ const getAdminDashboard = async (req, res) => {
 };
 
 /* ======================================================
-   🧑‍💼 SELLER APPROVAL
+   🧑‍💼 PENDING SELLERS
 ====================================================== */
 
-const getPendingSellers = async (req, res) => {
+const getPendingSellers = async (
+  req,
+  res
+) => {
   try {
     const sellers = await User.find({
       role: "seller",
       sellerStatus: "pending",
     })
-      .select("name email sellerInfo createdAt")
-      .sort({ createdAt: -1 });
+      .select(
+        "name email sellerInfo createdAt"
+      )
+      .sort({
+        createdAt: -1,
+      });
 
     return res.json(sellers);
   } catch (error) {
-    console.error("Pending Sellers Error:", error);
+    console.error(
+      "Pending Sellers Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Failed to load sellers",
@@ -376,26 +465,44 @@ const getPendingSellers = async (req, res) => {
   }
 };
 
-const approveSeller = async (req, res) => {
-  try {
-    const seller = await User.findById(req.params.id);
+/* ======================================================
+   ✅ APPROVE SELLER
+====================================================== */
 
-    if (!seller || seller.role !== "seller") {
+const approveSeller = async (
+  req,
+  res
+) => {
+  try {
+    const seller = await User.findById(
+      req.params.id
+    );
+
+    if (
+      !seller ||
+      seller.role !== "seller"
+    ) {
       return res.status(404).json({
         message: "Seller not found",
       });
     }
 
     seller.sellerStatus = "approved";
-    seller.sellerApprovedAt = new Date();
+    seller.sellerApprovedAt =
+      new Date();
 
     await seller.save();
 
     return res.json({
-      message: "Seller approved successfully",
+      success: true,
+      message:
+        "Seller approved successfully",
     });
   } catch (error) {
-    console.error("Approve Seller Error:", error);
+    console.error(
+      "Approve Seller Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Approval failed",
@@ -403,26 +510,43 @@ const approveSeller = async (req, res) => {
   }
 };
 
-const rejectSeller = async (req, res) => {
-  try {
-    const seller = await User.findById(req.params.id);
+/* ======================================================
+   ❌ REJECT SELLER
+====================================================== */
 
-    if (!seller || seller.role !== "seller") {
+const rejectSeller = async (
+  req,
+  res
+) => {
+  try {
+    const seller = await User.findById(
+      req.params.id
+    );
+
+    if (
+      !seller ||
+      seller.role !== "seller"
+    ) {
       return res.status(404).json({
         message: "Seller not found",
       });
     }
 
     seller.sellerStatus = "rejected";
-    seller.sellerRejectedAt = new Date();
+    seller.sellerRejectedAt =
+      new Date();
 
     await seller.save();
 
     return res.json({
+      success: true,
       message: "Seller rejected",
     });
   } catch (error) {
-    console.error("Reject Seller Error:", error);
+    console.error(
+      "Reject Seller Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Reject failed",
@@ -434,16 +558,32 @@ const rejectSeller = async (req, res) => {
    👥 GET ALL USERS
 ====================================================== */
 
-const getAllUsers = async (req, res) => {
+const getAllUsers = async (
+  req,
+  res
+) => {
   try {
-    const { search = "", role = "" } = req.query;
+    const {
+      search = "",
+      role = "",
+    } = req.query;
 
     const query = {};
 
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+        {
+          name: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          email: {
+            $regex: search,
+            $options: "i",
+          },
+        },
       ];
     }
 
@@ -453,14 +593,22 @@ const getAllUsers = async (req, res) => {
 
     const users = await User.find(query)
       .select("-password")
-      .sort({ createdAt: -1 })
+      .sort({
+        createdAt: -1,
+      })
       .limit(100);
 
-    res.json({ users });
+    return res.json({
+      success: true,
+      users,
+    });
   } catch (err) {
-    console.error("Get Users Error:", err);
+    console.error(
+      "Get Users Error:",
+      err
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to fetch users",
     });
   }
@@ -470,9 +618,14 @@ const getAllUsers = async (req, res) => {
    🚫 BLOCK / UNBLOCK USER
 ====================================================== */
 
-const toggleBlockUser = async (req, res) => {
+const toggleBlockUser = async (
+  req,
+  res
+) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(
+      req.params.id
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -480,97 +633,159 @@ const toggleBlockUser = async (req, res) => {
       });
     }
 
-    // ❌ admin ko block nahi karna
     if (user.role === "admin") {
       return res.status(400).json({
-        message: "Cannot block admin",
+        message:
+          "Cannot block admin",
       });
     }
 
-    user.isBlocked = !user.isBlocked;
+    user.isBlocked =
+      !user.isBlocked;
+
     await user.save();
 
-    res.json({
-      message: user.isBlocked ? "User blocked" : "User unblocked",
+    return res.json({
+      success: true,
+      message: user.isBlocked
+        ? "User blocked"
+        : "User unblocked",
     });
   } catch (err) {
-    console.error("Toggle Block Error:", err);
+    console.error(
+      "Toggle Block Error:",
+      err
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Action failed",
     });
   }
 };
+
 /* ======================================================
-   💰 WITHDRAW REQUESTS
+   💰 GET WITHDRAW REQUESTS
 ====================================================== */
 
-const getWithdrawRequests = async (req, res) => {
-  try {
-    const users = await User.find({
-      "walletTransactions.status": "pending",
-    }).select("name email walletTransactions");
+const getWithdrawRequests =
+  async (req, res) => {
+    try {
+      const users =
+        await User.find({
+          "walletTransactions.status":
+            "pending",
+        }).select(
+          "name email walletTransactions"
+        );
 
-    const requests = [];
+      const requests = [];
 
-    users.forEach((user) => {
-      user.walletTransactions.forEach((txn, index) => {
-        if (txn.source === "withdrawal" && txn.status === "pending") {
-          requests.push({
-            userId: user._id,
-            name: user.name,
-            email: user.email,
-            txnIndex: index,
-            amount: txn.amount,
-            createdAt: txn.createdAt,
-          });
-        }
+      users.forEach((user) => {
+        user.walletTransactions.forEach(
+          (txn, index) => {
+            if (
+              txn.source ===
+                "withdrawal" &&
+              txn.status === "pending"
+            ) {
+              requests.push({
+                userId: user._id,
+                name: user.name,
+                email: user.email,
+                txnIndex: index,
+                amount: txn.amount,
+                createdAt:
+                  txn.createdAt,
+              });
+            }
+          }
+        );
       });
-    });
 
-    return res.json(requests);
-  } catch (err) {
-    console.error("Withdraw Requests Error:", err);
+      return res.json({
+        success: true,
+        requests,
+      });
+    } catch (err) {
+      console.error(
+        "Withdraw Requests Error:",
+        err
+      );
 
-    return res.status(500).json({
-      message: "Failed to load requests",
-    });
-  }
-};
+      return res.status(500).json({
+        message:
+          "Failed to load requests",
+      });
+    }
+  };
 
-const approveWithdraw = async (req, res) => {
+/* ======================================================
+   ✅ APPROVE WITHDRAW
+====================================================== */
+
+const approveWithdraw = async (
+  req,
+  res
+) => {
   try {
-    const { userId, txnIndex } = req.body;
+    const { userId, txnIndex } =
+      req.body;
 
-    const user = await User.findById(userId);
+    const user = await User.findById(
+      userId
+    );
 
-    const txn = user.walletTransactions[txnIndex];
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
-    if (!txn || txn.status !== "pending") {
+    const txn =
+      user.walletTransactions[
+        txnIndex
+      ];
+
+    if (
+      !txn ||
+      txn.status !== "pending"
+    ) {
       return res.status(400).json({
         message: "Invalid request",
       });
     }
 
-    if (user.walletBalance < txn.amount) {
+    if (
+      user.walletBalance <
+      txn.amount
+    ) {
       txn.status = "failed";
+
       await user.save();
 
       return res.status(400).json({
-        message: "Insufficient balance",
+        message:
+          "Insufficient balance",
       });
     }
 
-    user.walletBalance -= txn.amount;
+    user.walletBalance -=
+      txn.amount;
+
     txn.status = "completed";
 
     await user.save();
 
     return res.json({
-      message: "Withdrawal approved",
+      success: true,
+      message:
+        "Withdrawal approved",
     });
   } catch (err) {
-    console.error("Approve Withdraw Error:", err);
+    console.error(
+      "Approve Withdraw Error:",
+      err
+    );
 
     return res.status(500).json({
       message: "Approval failed",
@@ -578,15 +793,37 @@ const approveWithdraw = async (req, res) => {
   }
 };
 
-const rejectWithdraw = async (req, res) => {
+/* ======================================================
+   ❌ REJECT WITHDRAW
+====================================================== */
+
+const rejectWithdraw = async (
+  req,
+  res
+) => {
   try {
-    const { userId, txnIndex } = req.body;
+    const { userId, txnIndex } =
+      req.body;
 
-    const user = await User.findById(userId);
+    const user = await User.findById(
+      userId
+    );
 
-    const txn = user.walletTransactions[txnIndex];
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
-    if (!txn || txn.status !== "pending") {
+    const txn =
+      user.walletTransactions[
+        txnIndex
+      ];
+
+    if (
+      !txn ||
+      txn.status !== "pending"
+    ) {
       return res.status(400).json({
         message: "Invalid request",
       });
@@ -597,13 +834,49 @@ const rejectWithdraw = async (req, res) => {
     await user.save();
 
     return res.json({
-      message: "Withdrawal rejected",
+      success: true,
+      message:
+        "Withdrawal rejected",
     });
   } catch (err) {
-    console.error("Reject Withdraw Error:", err);
+    console.error(
+      "Reject Withdraw Error:",
+      err
+    );
 
     return res.status(500).json({
       message: "Reject failed",
+    });
+  }
+};
+
+/* ======================================================
+   📊 ADMIN LOGS
+====================================================== */
+
+const getAdminLogs = async (
+  req,
+  res
+) => {
+  try {
+    const logs = await AdminLog.find()
+      .populate("admin", "email")
+      .select("-__v")
+      .sort({
+        createdAt: -1,
+      })
+      .limit(100);
+
+    return res.json(logs);
+  } catch (err) {
+    console.error(
+      "Logs Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to fetch logs",
     });
   }
 };
@@ -615,16 +888,22 @@ const rejectWithdraw = async (req, res) => {
 module.exports = {
   adminLogin,
   adminLogout,
+
+  enable2FA,
+  verify2FA,
+
   getAdminDashboard,
+
   getPendingSellers,
   approveSeller,
   rejectSeller,
+
+  getAllUsers,
+  toggleBlockUser,
+
   getWithdrawRequests,
   approveWithdraw,
   rejectWithdraw,
-  getAllUsers,
-  toggleBlockUser,
-  enable2FA,
-  verify2FA,
+
   getAdminLogs,
 };

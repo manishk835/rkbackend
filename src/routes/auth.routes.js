@@ -1,188 +1,257 @@
+// src/routes/auth.routes.js
+
 const express = require("express");
+
 const router = express.Router();
+
 const passport = require("passport");
-const rateLimit = require("express-rate-limit");
+
+const rateLimit = require(
+  "express-rate-limit"
+);
+
+/* ======================================================
+   CONTROLLERS
+====================================================== */
 
 const {
   register,
   login,
+
   verifyOTP,
   resendOtp,
+
   getMe,
   logout,
-  changePassword,
+
   forgotPassword,
   verifyResetOtp,
   resetPassword,
-  updateProfile, // ✅ NEW
-} = require("../controllers/auth.controller");
 
-const { googleCallback } = require("../controllers/google.controller");
-const { protect } = require("../middlewares/auth.middleware");
+  changePassword,
+  updateProfile,
+} = require(
+  "../controllers/auth.controller"
+);
 
-/* ======================================================
-   🔐 RATE LIMITERS (ANTI-HACK)
-====================================================== */
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: "Too many requests, try again later",
-});
-
-const otpLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 5,
-  message: "Too many OTP requests, please wait",
-});
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: "Too many login attempts, try later",
-});
+const {
+  googleCallback,
+} = require(
+  "../controllers/google.controller"
+);
 
 /* ======================================================
-   PUBLIC ROUTES
+   MIDDLEWARES
 ====================================================== */
 
-router.post("/register", authLimiter, register);
-router.post("/verify-otp", otpLimiter, verifyOTP);
-router.post("/resend-otp", otpLimiter, resendOtp);
-router.post("/login", loginLimiter, login);
+const {
+  protect,
+} = require(
+  "../middlewares/auth.middleware"
+);
 
-/* ================= GOOGLE AUTH ================= */
+/* ======================================================
+   🔐 RATE LIMITERS
+====================================================== */
+
+const authLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 20,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many requests, try again later",
+    },
+  });
+
+const otpLimiter =
+  rateLimit({
+    windowMs:
+      5 * 60 * 1000,
+
+    max: 5,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many OTP requests, please wait",
+    },
+  });
+
+const loginLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 10,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      message:
+        "Too many login attempts, try later",
+    },
+  });
+
+/* ======================================================
+   🌐 PUBLIC ROUTES
+====================================================== */
+
+/* ================= REGISTER ================= */
+
+router.post(
+  "/register",
+
+  authLimiter,
+
+  register
+);
+
+/* ================= OTP ================= */
+
+router.post(
+  "/verify-otp",
+
+  otpLimiter,
+
+  verifyOTP
+);
+
+router.post(
+  "/resend-otp",
+
+  otpLimiter,
+
+  resendOtp
+);
+
+/* ================= LOGIN ================= */
+
+router.post(
+  "/login",
+
+  loginLimiter,
+
+  login
+);
+
+/* ======================================================
+   🌐 GOOGLE AUTH
+====================================================== */
 
 router.get(
   "/google",
-  passport.authenticate("google", {
-    scope: ["profile", "email"],
-  })
+
+  passport.authenticate(
+    "google",
+    {
+      scope: [
+        "profile",
+        "email",
+      ],
+    }
+  )
 );
 
 router.get(
   "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-  }),
+
+  passport.authenticate(
+    "google",
+    {
+      session: false,
+    }
+  ),
+
   googleCallback
 );
 
-/* ================= PASSWORD RESET ================= */
-
-router.post("/forgot-password", otpLimiter, forgotPassword);
-router.post("/verify-reset-otp", otpLimiter, verifyResetOtp);
-router.post("/reset-password", authLimiter, resetPassword);
-
 /* ======================================================
-   AUTHENTICATED ROUTES
+   🔐 PASSWORD RESET
 ====================================================== */
 
-router.get("/me", protect, getMe);
+router.post(
+  "/forgot-password",
 
-router.post("/logout", protect, logout);
+  otpLimiter,
 
-router.put("/change-password", protect, changePassword);
+  forgotPassword
+);
 
-/* ================= PROFILE UPDATE ================= */
+router.post(
+  "/verify-reset-otp",
 
-// 🔥 NEW ROUTE (IMPORTANT)
-router.put("/update", protect, updateProfile);
+  otpLimiter,
+
+  verifyResetOtp
+);
+
+router.post(
+  "/reset-password",
+
+  authLimiter,
+
+  resetPassword
+);
+
+/* ======================================================
+   🔒 AUTH REQUIRED
+====================================================== */
+
+router.use(protect);
+
+/* ================= CURRENT USER ================= */
+
+router.get(
+  "/me",
+
+  getMe
+);
+
+/* ================= LOGOUT ================= */
+
+router.post(
+  "/logout",
+
+  logout
+);
+
+/* ================= CHANGE PASSWORD ================= */
+
+router.put(
+  "/change-password",
+
+  changePassword
+);
+
+/* ================= UPDATE PROFILE ================= */
+
+router.put(
+  "/update",
+
+  updateProfile
+);
+
+/* ======================================================
+   EXPORT
+====================================================== */
 
 module.exports = router;
-
-// const express = require("express");
-// const router = express.Router();
-// const passport = require("passport");
-
-// const rateLimit = require("express-rate-limit");
-
-// const {
-//   register,
-//   login,
-//   verifyOTP,
-//   resendOtp,
-//   getMe,
-//   logout,
-//   changePassword,
-//   forgotPassword,
-//   verifyResetOtp,
-//   resetPassword,
-// } = require("../controllers/auth.controller");
-
-// const { googleCallback } = require("../controllers/google.controller");
-// const { protect } = require("../middlewares/auth.middleware");
-
-// /* ======================================================
-//    🔐 RATE LIMITERS (ANTI-HACK)
-// ====================================================== */
-
-// // 🔥 auth लिमिटर (login/register brute force रोकने के लिए)
-// const authLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 min
-//   max: 20,
-//   message: "Too many requests, try again later",
-// });
-
-// // 🔥 OTP लिमिटर
-// const otpLimiter = rateLimit({
-//   windowMs: 5 * 60 * 1000, // 5 min
-//   max: 5,
-//   message: "Too many OTP requests, please wait",
-// });
-
-// // 🔥 login strict limiter
-// const loginLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: 10,
-//   message: "Too many login attempts, try later",
-// });
-
-// /* ======================================================
-//    PUBLIC ROUTES
-// ====================================================== */
-
-// router.post("/register", authLimiter, register);
-
-// router.post("/verify-otp", otpLimiter, verifyOTP);
-
-// router.post("/resend-otp", otpLimiter, resendOtp);
-
-// router.post("/login", loginLimiter, login);
-
-// /* ================= GOOGLE AUTH ================= */
-
-// router.get(
-//   "/google",
-//   passport.authenticate("google", {
-//     scope: ["profile", "email"],
-//   })
-// );
-
-// router.get(
-//   "/google/callback",
-//   passport.authenticate("google", {
-//     session: false,
-//   }),
-//   googleCallback
-// );
-
-// /* ================= PASSWORD RESET ================= */
-
-// router.post("/forgot-password", otpLimiter, forgotPassword);
-
-// router.post("/verify-reset-otp", otpLimiter, verifyResetOtp);
-
-// router.post("/reset-password", authLimiter, resetPassword);
-
-// /* ======================================================
-//    AUTHENTICATED ROUTES
-// ====================================================== */
-
-// router.get("/me", protect, getMe);
-
-// router.post("/logout", protect, logout);
-
-// router.put("/change-password", protect, changePassword);
-
-// module.exports = router;

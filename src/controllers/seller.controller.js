@@ -2,11 +2,16 @@
 
 const Product = require("../models/Product");
 const Order = require("../models/Order");
+const User = require("../models/User");
+const WalletTransaction = require("../models/WalletTransaction");
 
-/* ================= SELLER PRODUCTS ================= */
+/* ======================================================
+   SELLER PRODUCTS
+====================================================== */
 
 exports.getSellerProducts = async (req, res) => {
   try {
+
     const sellerId = req.user._id;
 
     const products = await Product.find({
@@ -16,622 +21,744 @@ exports.getSellerProducts = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    res.json(products);
+    return res.json(products);
 
   } catch (err) {
-    console.error("Seller Products Error:", err);
-    res.status(500).json({ message: "Failed to load products" });
+
+    console.error(
+      "Seller Products Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "Failed to load products",
+    });
   }
 };
 
-/* ================= SELLER ORDERS ================= */
+/* ======================================================
+   SINGLE SELLER PRODUCT
+====================================================== */
 
-exports.getSellerOrders = async (req, res) => {
+exports.getSingleSellerProduct =
+  async (req, res) => {
+    try {
+
+      const product =
+        await Product.findOne({
+          _id: req.params.id,
+          seller: req.user._id,
+          isDeleted: false,
+        }).lean();
+
+      if (!product) {
+        return res.status(404).json({
+          message: "Product not found",
+        });
+      }
+
+      return res.json(product);
+
+    } catch (err) {
+
+      return res.status(500).json({
+        message: "Failed to load product",
+      });
+    }
+  };
+
+/* ======================================================
+   SELLER ORDERS
+====================================================== */
+
+exports.getSellerOrders = async (
+  req,
+  res
+) => {
   try {
+
     const sellerId = req.user._id;
 
     const orders = await Order.find({
       "items.seller": sellerId,
     })
-      .select("_id status paymentStatus createdAt customer items")
+      .select(
+        "_id status paymentStatus createdAt customer items totalAmount"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
-    const filteredOrders = orders.map(order => {
+    const filteredOrders =
+      orders.map((order) => {
 
-      const sellerItems = order.items.filter(
-        item => item.seller.toString() === sellerId.toString()
-      );
+        const sellerItems =
+          order.items.filter(
+            (item) =>
+              item.seller.toString() ===
+              sellerId.toString()
+          );
 
-      const sellerTotal = sellerItems.reduce(
-        (sum, item) => sum + item.sellerEarning,
+        const sellerTotal =
+          sellerItems.reduce(
+            (sum, item) =>
+              sum +
+              (item.sellerEarning || 0),
+            0
+          );
+
+        return {
+          _id: order._id,
+          status: order.status,
+          paymentStatus:
+            order.paymentStatus,
+          createdAt:
+            order.createdAt,
+          customer:
+            order.customer,
+          items: sellerItems,
+          sellerTotal,
+        };
+      });
+
+    return res.json(filteredOrders);
+
+  } catch (err) {
+
+    console.error(
+      "Seller Orders Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "Failed to load orders",
+    });
+  }
+};
+
+/* ======================================================
+   SELLER DASHBOARD
+====================================================== */
+
+exports.getSellerDashboard =
+  async (req, res) => {
+    try {
+
+      const sellerId = req.user._id;
+
+      /* ================= PRODUCTS ================= */
+
+      const totalProducts =
+        await Product.countDocuments({
+          seller: sellerId,
+          isDeleted: false,
+        });
+
+      const activeProducts =
+        await Product.countDocuments({
+          seller: sellerId,
+          isDeleted: false,
+          isActive: true,
+        });
+
+      const pendingProducts =
+        await Product.countDocuments({
+          seller: sellerId,
+          status: "pending",
+          isDeleted: false,
+        });
+
+      const lowStockProducts =
+        await Product.countDocuments({
+          seller: sellerId,
+          isDeleted: false,
+
+          $expr: {
+            $lte: [
+              "$totalStock",
+              "$lowStockThreshold",
+            ],
+          },
+        });
+
+      /* ================= ORDERS ================= */
+
+      const totalOrders =
+        await Order.countDocuments({
+          "items.seller": sellerId,
+        });
+
+      const pendingOrders =
+        await Order.countDocuments({
+          "items.seller": sellerId,
+
+          status: {
+            $in: [
+              "Pending",
+              "Confirmed",
+              "Packed",
+            ],
+          },
+        });
+
+      /* ================= REVENUE ================= */
+
+      const totalRevenueAgg =
+        await Order.aggregate([
+          {
+            $match: {
+              status: "Delivered",
+            },
+          },
+
+          {
+            $unwind: "$items",
+          },
+
+          {
+            $match: {
+              "items.seller":
+                sellerId,
+            },
+          },
+
+          {
+            $group: {
+              _id: null,
+
+              total: {
+                $sum:
+                  "$items.sellerEarning",
+              },
+            },
+          },
+        ]);
+
+      const totalRevenue =
+        totalRevenueAgg[0]
+          ?.total || 0;
+
+      /* ================= MONTHLY REVENUE ================= */
+
+      const startOfMonth =
+        new Date();
+
+      startOfMonth.setDate(1);
+
+      startOfMonth.setHours(
+        0,
+        0,
+        0,
         0
       );
 
-      return {
-        _id: order._id,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        createdAt: order.createdAt,
-        customer: order.customer,
-        items: sellerItems,
-        sellerTotal,
-      };
+      const monthlyRevenueAgg =
+        await Order.aggregate([
+          {
+            $match: {
+              status: "Delivered",
 
-    });
+              createdAt: {
+                $gte:
+                  startOfMonth,
+              },
+            },
+          },
 
-    res.json(filteredOrders);
+          {
+            $unwind: "$items",
+          },
 
-  } catch (err) {
-    console.error("Seller Orders Error:", err);
-    res.status(500).json({ message: "Failed to load orders" });
-  }
-};
+          {
+            $match: {
+              "items.seller":
+                sellerId,
+            },
+          },
 
-/* ================= SELLER DASHBOARD ================= */
+          {
+            $group: {
+              _id: null,
 
-exports.getSellerDashboard = async (req, res) => {
-  try {
-    const sellerId = req.user._id;
+              total: {
+                $sum:
+                  "$items.sellerEarning",
+              },
+            },
+          },
+        ]);
 
-    /* ===== PRODUCTS ===== */
+      const monthlyRevenue =
+        monthlyRevenueAgg[0]
+          ?.total || 0;
 
-    const totalProducts = await Product.countDocuments({
-      seller: sellerId,
-      isDeleted: false,
-    });
+      return res.json({
+        totalProducts,
+        activeProducts,
+        pendingProducts,
 
-    const lowStockProducts = await Product.countDocuments({
-      seller: sellerId,
-      isDeleted: false,
-      $expr: { $lt: ["$totalStock", "$lowStockThreshold"] },
-    });
+        totalOrders,
+        pendingOrders,
 
-    /* ===== ORDERS ===== */
+        lowStockProducts,
 
-    const totalOrders = await Order.countDocuments({
-      "items.seller": sellerId,
-    });
+        totalRevenue,
+        monthlyRevenue,
 
-    const pendingOrders = await Order.countDocuments({
-      "items.seller": sellerId,
-      status: { $in: ["Pending", "Confirmed", "Packed"] },
-    });
+        walletBalance:
+          req.user.walletBalance || 0,
+      });
 
-    /* ===== TOTAL REVENUE ===== */
+    } catch (err) {
 
-    const totalRevenueAgg = await Order.aggregate([
-      { $match: { status: "Delivered" } },
-      { $unwind: "$items" },
-      { $match: { "items.seller": sellerId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$items.sellerEarning" },
-        },
-      },
-    ]);
+      console.error(
+        "Seller Dashboard Error:",
+        err
+      );
 
-    const totalRevenue = totalRevenueAgg[0]?.total || 0;
-
-    /* ===== MONTHLY REVENUE (FIXED 🔥) ===== */
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const monthlyRevenueAgg = await Order.aggregate([
-      {
-        $match: {
-          status: "Delivered",
-          createdAt: { $gte: startOfMonth },
-        },
-      },
-      { $unwind: "$items" },
-      { $match: { "items.seller": sellerId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$items.sellerEarning" },
-        },
-      },
-    ]);
-
-    const monthlyRevenue = monthlyRevenueAgg[0]?.total || 0;
-
-    /* ===== RESPONSE ===== */
-
-    res.json({
-      totalProducts,
-      totalOrders,
-      pendingOrders,
-      lowStockProducts,
-      totalRevenue,
-      monthlyRevenue, // 🔥 FIXED
-      walletBalance: req.user.walletBalance || 0,
-    });
-
-  } catch (err) {
-    console.error("Seller Dashboard Error:", err);
-    res.status(500).json({ message: "Failed to load dashboard" });
-  }
-};
-
-/* ================= UPDATE SELLER PRODUCT ================= */
-
-exports.updateSellerProduct = async (req, res) => {
-  try {
-    const sellerId = req.user._id;
-
-    const product = await Product.findOne({
-      _id: req.params.id,
-      seller: sellerId,
-      isDeleted: false,
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        message: "Product not found",
+      return res.status(500).json({
+        message:
+          "Failed to load dashboard",
       });
     }
+  };
 
-    const allowedFields = [
-      "title",
-      "description",
-      "shortDescription",
-      "price",
-      "originalPrice",
-      "category",
-      "subCategory",
-      "brand",
-      "images",
-      "thumbnail",
-      "variants",
-    ];
+/* ======================================================
+   SELLER ANALYTICS
+====================================================== */
 
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        product[field] = req.body[field];
+exports.getSellerAnalytics =
+  async (req, res) => {
+    try {
+
+      const sellerId = req.user._id;
+
+      const monthlySales =
+        await Order.aggregate([
+          {
+            $match: {
+              status: "Delivered",
+            },
+          },
+
+          {
+            $unwind: "$items",
+          },
+
+          {
+            $match: {
+              "items.seller":
+                sellerId,
+            },
+          },
+
+          {
+            $group: {
+              _id: {
+                month: {
+                  $month:
+                    "$createdAt",
+                },
+              },
+
+              revenue: {
+                $sum:
+                  "$items.sellerEarning",
+              },
+
+              orders: {
+                $sum: 1,
+              },
+            },
+          },
+
+          {
+            $sort: {
+              "_id.month": 1,
+            },
+          },
+        ]);
+
+      return res.json({
+        monthlySales,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Analytics Error:",
+        err
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to load analytics",
+      });
+    }
+  };
+
+/* ======================================================
+   LOW STOCK PRODUCTS
+====================================================== */
+
+exports.getLowStockProducts =
+  async (req, res) => {
+    try {
+
+      const products =
+        await Product.find({
+          seller: req.user._id,
+
+          isDeleted: false,
+
+          $expr: {
+            $lte: [
+              "$totalStock",
+              "$lowStockThreshold",
+            ],
+          },
+        })
+          .select(
+            "title name totalStock lowStockThreshold thumbnail"
+          )
+          .sort({
+            totalStock: 1,
+          });
+
+      return res.json(products);
+
+    } catch (err) {
+
+      return res.status(500).json({
+        message:
+          "Failed to load low stock products",
+      });
+    }
+  };
+
+/* ======================================================
+   UPDATE SELLER PRODUCT
+====================================================== */
+
+exports.updateSellerProduct =
+  async (req, res) => {
+    try {
+
+      const sellerId =
+        req.user._id;
+
+      const product =
+        await Product.findOne({
+          _id: req.params.id,
+          seller: sellerId,
+          isDeleted: false,
+        });
+
+      if (!product) {
+        return res.status(404).json({
+          message:
+            "Product not found",
+        });
       }
-    });
 
-    // 🔥 Re-approval flow
-    product.status = "pending";
-    product.isApproved = false;
+      const allowedFields = [
+        "title",
+        "name",
+        "description",
+        "shortDescription",
+        "price",
+        "originalPrice",
+        "category",
+        "subCategory",
+        "brand",
+        "images",
+        "thumbnail",
+        "variants",
+        "attributes",
+        "tags",
+      ];
 
-    await product.save();
+      allowedFields.forEach(
+        (field) => {
+          if (
+            req.body[field] !==
+            undefined
+          ) {
+            product[field] =
+              req.body[field];
+          }
+        }
+      );
 
-    res.json({
-      message: "Product updated, waiting for approval",
-      product,
-    });
+      /* ================= RECALCULATE STOCK ================= */
 
-  } catch (err) {
-    console.error("Update Product Error:", err);
-    res.status(500).json({ message: "Product update failed" });
-  }
-};
+      if (
+        product.variants?.length
+      ) {
+        product.totalStock =
+          product.variants.reduce(
+            (sum, variant) =>
+              sum +
+              (Number(
+                variant.stock
+              ) || 0),
+            0
+          );
 
-/* ================= DELETE SELLER PRODUCT ================= */
+        product.inStock =
+          product.totalStock > 0;
+      }
 
-exports.deleteSellerProduct = async (req, res) => {
-  try {
-    const sellerId = req.user._id;
+      /* ================= RE-APPROVAL FLOW ================= */
 
-    const product = await Product.findOne({
-      _id: req.params.id,
-      seller: sellerId,
-    });
+      product.status =
+        "pending";
 
-    if (!product) {
-      return res.status(404).json({
-        message: "Product not found",
+      product.isApproved =
+        false;
+
+      await product.save();
+
+      return res.json({
+        message:
+          "Product updated and sent for approval",
+
+        product,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Update Product Error:",
+        err
+      );
+
+      return res.status(500).json({
+        message:
+          "Product update failed",
       });
     }
+  };
 
-    // 🔥 SOFT DELETE
-    product.isDeleted = true;
-    await product.save();
+/* ======================================================
+   TOGGLE PRODUCT ACTIVE
+====================================================== */
 
-    res.json({
-      message: "Product deleted (soft delete)",
-    });
+exports.toggleSellerProductStatus =
+  async (req, res) => {
+    try {
 
-  } catch (err) {
-    console.error("Delete Product Error:", err);
-    res.status(500).json({ message: "Product delete failed" });
-  }
-};
+      const product =
+        await Product.findOne({
+          _id: req.params.id,
+          seller: req.user._id,
+          isDeleted: false,
+        });
 
-exports.getWalletTransactions = async (req, res) => {
-  try {
-    const seller = await User.findById(req.user._id)
-      .select("walletBalance walletTransactions")
-      .lean();
+      if (!product) {
+        return res.status(404).json({
+          message:
+            "Product not found",
+        });
+      }
 
-    if (!seller) {
-      return res.status(404).json({
-        message: "Seller not found",
+      product.isActive =
+        !product.isActive;
+
+      await product.save();
+
+      return res.json({
+        message:
+          product.isActive
+            ? "Product activated"
+            : "Product deactivated",
+
+        isActive:
+          product.isActive,
+      });
+
+    } catch (err) {
+
+      return res.status(500).json({
+        message:
+          "Status update failed",
       });
     }
+  };
 
-    res.json({
-      balance: seller.walletBalance || 0,
-      transactions: seller.walletTransactions || [],
-    });
+/* ======================================================
+   DELETE SELLER PRODUCT
+====================================================== */
 
-  } catch (err) {
-    console.error("Wallet Fetch Error:", err);
-    res.status(500).json({
-      message: "Failed to load wallet",
-    });
-  }
-};
+exports.deleteSellerProduct =
+  async (req, res) => {
+    try {
 
-// exports.withdrawFromWallet = async (req, res) => {
-//   try {
-//     const { amount } = req.body;
+      const sellerId =
+        req.user._id;
 
-//     if (!amount || amount <= 0) {
-//       return res.status(400).json({
-//         message: "Invalid amount",
-//       });
-//     }
+      const product =
+        await Product.findOne({
+          _id: req.params.id,
+          seller: sellerId,
+          isDeleted: false,
+        });
 
-//     if (amount < 100) {
-//       return res.status(400).json({
-//         message: "Minimum withdrawal is ₹100",
-//       });
-//     }
+      if (!product) {
+        return res.status(404).json({
+          message:
+            "Product not found",
+        });
+      }
 
-//     const seller = await User.findById(req.user._id);
+      /* ================= SOFT DELETE ================= */
 
-//     if (!seller) {
-//       return res.status(404).json({
-//         message: "Seller not found",
-//       });
-//     }
+      product.isDeleted = true;
 
-//     if (seller.walletBalance < amount) {
-//       return res.status(400).json({
-//         message: "Insufficient balance",
-//       });
-//     }
+      product.isActive = false;
 
-//     // 🔥 Debit wallet
-//     await seller.debitWallet({
-//       amount,
-//       source: "withdrawal",
-//       note: "Seller withdrawal request",
-//     });
+      await product.save();
 
-//     res.json({
-//       message: "Withdrawal successful",
-//       balance: seller.walletBalance,
-//     });
+      return res.json({
+        message:
+          "Product deleted successfully",
+      });
 
-//   } catch (err) {
-//     console.error("Withdraw Error:", err);
-//     res.status(500).json({
-//       message: "Withdrawal failed",
-//     });
-//   }
-// };
-// 
-exports.withdrawFromWallet = async (req, res) => {
-  try {
-    const { amount } = req.body;
+    } catch (err) {
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({
-        message: "Invalid amount",
+      console.error(
+        "Delete Product Error:",
+        err
+      );
+
+      return res.status(500).json({
+        message:
+          "Product delete failed",
       });
     }
+  };
 
-    const seller = await User.findById(req.user._id);
+/* ======================================================
+   GET WALLET TRANSACTIONS
+====================================================== */
 
-    if (!seller) {
-      return res.status(404).json({
-        message: "Seller not found",
+exports.getWalletTransactions =
+  async (req, res) => {
+    try {
+
+      const transactions =
+        await WalletTransaction.find({
+          user: req.user._id,
+        })
+          .sort({
+            createdAt: -1,
+          })
+          .lean();
+
+      return res.json({
+        balance:
+          req.user.walletBalance || 0,
+
+        transactions,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Wallet Fetch Error:",
+        err
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to load wallet",
       });
     }
+  };
 
-    if (seller.walletBalance < amount) {
-      return res.status(400).json({
-        message: "Insufficient balance",
+/* ======================================================
+   WITHDRAW FROM WALLET
+====================================================== */
+
+exports.withdrawFromWallet =
+  async (req, res) => {
+    try {
+
+      const amount =
+        Number(req.body.amount);
+
+      if (
+        !amount ||
+        amount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid amount",
+        });
+      }
+
+      if (amount < 100) {
+        return res.status(400).json({
+          message:
+            "Minimum withdrawal is ₹100",
+        });
+      }
+
+      const seller =
+        await User.findById(
+          req.user._id
+        );
+
+      if (!seller) {
+        return res.status(404).json({
+          message:
+            "Seller not found",
+        });
+      }
+
+      if (
+        seller.walletBalance <
+        amount
+      ) {
+        return res.status(400).json({
+          message:
+            "Insufficient balance",
+        });
+      }
+
+      /* ================= CREATE TRANSACTION ================= */
+
+      await WalletTransaction.create({
+        user: seller._id,
+
+        type: "DEBIT",
+
+        amount,
+
+        source:
+          "withdrawal",
+
+        status:
+          "PENDING",
+
+        note:
+          "Seller withdrawal request",
+      });
+
+      return res.json({
+        message:
+          "Withdrawal request submitted",
+      });
+
+    } catch (err) {
+
+      console.error(
+        "Withdraw Error:",
+        err
+      );
+
+      return res.status(500).json({
+        message:
+          "Withdrawal failed",
       });
     }
-
-    // 🔥 CREATE PENDING REQUEST
-    seller.walletTransactions.push({
-      type: "debit",
-      amount,
-      source: "withdrawal",
-      status: "pending",
-      note: "Withdrawal request",
-    });
-
-    await seller.save();
-
-    res.json({
-      message: "Withdrawal request submitted",
-    });
-
-  } catch (err) {
-    console.error("Withdraw Error:", err);
-    res.status(500).json({
-      message: "Withdrawal failed",
-    });
-  }
-};
-// src/controllers/seller.controller.js
-
-// const Product = require("../models/Product");
-// const Order = require("../models/Order");
-
-// /* ================= SELLER PRODUCTS ================= */
-
-// exports.getSellerProducts = async (req, res) => {
-
-//   try {
-
-//     const sellerId = req.user._id;
-
-//     const products = await Product
-//       .find({ seller: sellerId })
-//       .sort({ createdAt: -1 })
-//       .lean();
-
-//     res.json(products);
-
-//   } catch (err) {
-
-//     console.error("Seller Products Error:", err);
-
-//     res.status(500).json({
-//       message: "Failed to load products",
-//     });
-
-//   }
-
-// };
-
-// /* ================= SELLER ORDERS ================= */
-
-// exports.getSellerOrders = async (req, res) => {
-
-//   try {
-
-//     const sellerId = req.user._id;
-
-//     const orders = await Order.find({
-//       "items.seller": sellerId,
-//     })
-//       .select("_id status paymentStatus createdAt customer items")
-//       .sort({ createdAt: -1 })
-//       .lean();
-
-//     const filteredOrders = orders.map(order => {
-
-//       const sellerItems = order.items.filter(
-//         item =>
-//           item.seller.toString() ===
-//           sellerId.toString()
-//       );
-
-//       const sellerTotal = sellerItems.reduce(
-//         (sum, item) =>
-//           sum + item.sellerEarning,
-//         0
-//       );
-
-//       return {
-//         _id: order._id,
-//         status: order.status,
-//         paymentStatus: order.paymentStatus,
-//         createdAt: order.createdAt,
-//         customer: order.customer,
-//         items: sellerItems,
-//         sellerTotal,
-//       };
-
-//     });
-
-//     res.json(filteredOrders);
-
-//   } catch (err) {
-
-//     console.error("Seller Orders Error:", err);
-
-//     res.status(500).json({
-//       message: "Failed to load orders",
-//     });
-
-//   }
-
-// };
-
-// /* ================= SELLER DASHBOARD ================= */
-
-// exports.getSellerDashboard = async (req, res) => {
-
-//   try {
-
-//     const sellerId = req.user._id;
-
-//     const totalProducts =
-//       await Product.countDocuments({
-//         seller: sellerId,
-//       });
-
-//     const lowStockProducts =
-//       await Product.countDocuments({
-//         seller: sellerId,
-//         totalStock: { $lt: 5 },
-//       });
-
-//     const totalOrders =
-//       await Order.countDocuments({
-//         "items.seller": sellerId,
-//       });
-
-//     const pendingOrders =
-//       await Order.countDocuments({
-//         "items.seller": sellerId,
-//         status: {
-//           $in: [
-//             "Pending",
-//             "Confirmed",
-//             "Packed",
-//           ],
-//         },
-//       });
-
-//     const revenue = await Order.aggregate([
-
-//       {
-//         $match: {
-//           status: "Delivered",
-//         },
-//       },
-
-//       { $unwind: "$items" },
-
-//       {
-//         $match: {
-//           "items.seller": sellerId,
-//         },
-//       },
-
-//       {
-//         $group: {
-//           _id: null,
-//           total: {
-//             $sum: "$items.sellerEarning",
-//           },
-//         },
-//       },
-
-//     ]);
-
-//     res.json({
-
-//       totalProducts,
-//       totalOrders,
-//       pendingOrders,
-//       lowStockProducts,
-//       totalRevenue: revenue[0]?.total || 0,
-//       walletBalance: req.user.walletBalance || 0,
-
-//     });
-
-//   } catch (err) {
-
-//     console.error("Seller Dashboard Error:", err);
-
-//     res.status(500).json({
-//       message: "Failed to load dashboard",
-//     });
-
-//   }
-
-// };
-
-// /* ================= UPDATE SELLER PRODUCT ================= */
-
-// exports.updateSellerProduct = async (req, res) => {
-
-//   try {
-
-//     const sellerId = req.user._id;
-
-//     const product = await Product.findOne({
-//       _id: req.params.id,
-//       seller: sellerId,
-//     });
-
-//     if (!product) {
-//       return res.status(404).json({
-//         message: "Product not found",
-//       });
-//     }
-
-//     const allowedFields = [
-//       "name",
-//       "description",
-//       "price",
-//       "discountPrice",
-//       "category",
-//       "brand",
-//       "images",
-//       "sizes",
-//       "colors",
-//       "totalStock",
-//     ];
-
-//     allowedFields.forEach(field => {
-
-//       if (req.body[field] !== undefined) {
-//         product[field] = req.body[field];
-//       }
-
-//     });
-
-//     product.isApproved = false;
-
-//     await product.save();
-
-//     res.json({
-//       message:
-//         "Product updated. Waiting for admin approval.",
-//       product,
-//     });
-
-//   } catch (err) {
-
-//     console.error("Update Product Error:", err);
-
-//     res.status(500).json({
-//       message: "Product update failed",
-//     });
-
-//   }
-
-// };
-
-// /* ================= DELETE SELLER PRODUCT ================= */
-
-// exports.deleteSellerProduct = async (req, res) => {
-
-//   try {
-
-//     const sellerId = req.user._id;
-
-//     const product = await Product.findOne({
-//       _id: req.params.id,
-//       seller: sellerId,
-//     });
-
-//     if (!product) {
-//       return res.status(404).json({
-//         message: "Product not found",
-//       });
-//     }
-
-//     await product.deleteOne();
-
-//     res.json({
-//       message: "Product deleted successfully",
-//     });
-
-//   } catch (err) {
-
-//     console.error("Delete Product Error:", err);
-
-//     res.status(500).json({
-//       message: "Product delete failed",
-//     });
-
-//   }
-
-// };
+  };

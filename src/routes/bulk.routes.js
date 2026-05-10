@@ -1,9 +1,66 @@
+// src/routes/bulk.routes.js
+
 const express = require("express");
-const upload = require("../middlewares/csvUpload"); // ✅ CHANGE
-const { bulkUpload } = require("../controllers/bulk.controller");
 
 const router = express.Router();
 
-router.post("/products", upload.single("file"), bulkUpload);
+/* ======================================================
+   MIDDLEWARES
+====================================================== */
+
+const upload = require(
+  "../middlewares/csvUpload"
+);
+
+const {
+  protect,
+  requireRole,
+  approvedSeller,
+} = require(
+  "../middlewares/auth.middleware"
+);
+
+/* ======================================================
+   CONTROLLER
+====================================================== */
+
+const {
+  bulkUpload,
+} = require(
+  "../controllers/bulk.controller"
+);
+
+/* ======================================================
+   SELLER ACCESS
+====================================================== */
+
+const sellerAccess = [
+  protect,
+  requireRole("seller"),
+  approvedSeller,
+];
+
+/* ======================================================
+   ROUTES
+====================================================== */
+
+/*
+POST
+/api/bulk/products
+*/
+
+router.post(
+  "/products",
+
+  sellerAccess,
+
+  upload.single("file"),
+
+  bulkUpload
+);
+
+/* ======================================================
+   EXPORT
+====================================================== */
 
 module.exports = router;
