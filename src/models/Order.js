@@ -481,50 +481,71 @@ OrderSchema.pre(
    AUTO CALCULATIONS
 ====================================================== */
 
-OrderSchema.pre(
-  "save",
-  function () {
+// OrderSchema.pre(
+//   "save",
+//   function () {
 
-    let totalCommission =
-      0;
+//     let totalCommission =
+//       0;
 
-    if (
-      !this.items ||
-      this.items.length === 0
-    ) {
-      return next();
-    }
+//     if (
+//       !this.items ||
+//       this.items.length === 0
+//     ) {
+//       return next();
+//     }
 
-    this.items.forEach(
-      (item) => {
+//     this.items.forEach(
+//       (item) => {
 
-        const itemTotal =
-          item.price *
-          item.quantity;
+//         const itemTotal =
+//           item.price *
+//           item.quantity;
 
-        const commissionAmount =
-          (itemTotal *
-            item.commission) /
-          100;
+//         const commissionAmount =
+//           (itemTotal *
+//             item.commission) /
+//           100;
 
-        item.commissionAmount =
-          commissionAmount;
+//         item.commissionAmount =
+//           commissionAmount;
 
-        item.sellerEarning =
-          itemTotal -
-          commissionAmount;
+//         item.sellerEarning =
+//           itemTotal -
+//           commissionAmount;
 
-        totalCommission +=
-          commissionAmount;
-      }
-    );
+//         totalCommission +=
+//           commissionAmount;
+//       }
+//     );
 
-    this.platformCommission =
-      totalCommission;
+//     this.platformCommission =
+//       totalCommission;
 
+//   }
+// );
+
+OrderSchema.pre("save", function () {
+  let totalCommission = 0;
+
+  if (!this.items || this.items.length === 0) {
+    return;
   }
-);
 
+  this.items.forEach((item) => {
+    const itemTotal = item.price * item.quantity;
+
+    const commissionAmount =
+      (itemTotal * item.commission) / 100;
+
+    item.commissionAmount = commissionAmount;
+    item.sellerEarning = itemTotal - commissionAmount;
+
+    totalCommission += commissionAmount;
+  });
+
+  this.platformCommission = totalCommission;
+});
 /* ======================================================
    STATUS HISTORY
 ====================================================== */

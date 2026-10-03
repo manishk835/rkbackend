@@ -185,69 +185,104 @@ addressSchema.index({
    AUTO DEFAULT ADDRESS
 ====================================================== */
 
-addressSchema.pre(
-  "save",
-  async function (next) {
+// addressSchema.pre(
+//   "save",
+//   async function (next) {
 
-    try {
+//     try {
 
-      /* ================= FIRST ADDRESS ================= */
+//       /* ================= FIRST ADDRESS ================= */
 
-      if (
-        this.isNew
-      ) {
+//       if (
+//         this.isNew
+//       ) {
 
-        const existing =
-          await mongoose
-            .model("Address")
-            .countDocuments({
-              user:
-                this.user,
-            });
+//         const existing =
+//           await mongoose
+//             .model("Address")
+//             .countDocuments({
+//               user:
+//                 this.user,
+//             });
 
-        if (
-          existing === 0
-        ) {
-          this.isDefault =
-            true;
-        }
-      }
+//         if (
+//           existing === 0
+//         ) {
+//           this.isDefault =
+//             true;
+//         }
+//       }
 
-      /* ================= SINGLE DEFAULT ================= */
+//       /* ================= SINGLE DEFAULT ================= */
 
-      if (
-        this.isDefault
-      ) {
+//       if (
+//         this.isDefault
+//       ) {
 
-        await mongoose
-          .model("Address")
-          .updateMany(
-            {
-              user:
-                this.user,
+//         await mongoose
+//           .model("Address")
+//           .updateMany(
+//             {
+//               user:
+//                 this.user,
 
-              _id: {
-                $ne:
-                  this._id,
-              },
-            },
+//               _id: {
+//                 $ne:
+//                   this._id,
+//               },
+//             },
 
-            {
-              $set: {
-                isDefault: false,
-              },
-            }
-          );
-      }
+//             {
+//               $set: {
+//                 isDefault: false,
+//               },
+//             }
+//           );
+//       }
 
-      next();
+//       next();
 
-    } catch (err) {
+//     } catch (err) {
 
-      next(err);
+//       next(err);
+//     }
+//   }
+// );
+
+
+/* ======================================================
+   AUTO DEFAULT ADDRESS
+====================================================== */
+
+addressSchema.pre("save", async function () {
+  /* FIRST ADDRESS */
+  if (this.isNew) {
+    const existing = await mongoose
+      .model("Address")
+      .countDocuments({
+        user: this.user,
+      });
+
+    if (existing === 0) {
+      this.isDefault = true;
     }
   }
-);
+
+  /* SINGLE DEFAULT */
+  if (this.isDefault) {
+    await mongoose
+      .model("Address")
+      .updateMany(
+        {
+          user: this.user,
+          _id: { $ne: this._id },
+        },
+        {
+          $set: { isDefault: false },
+        }
+      );
+  }
+});
 
 /* ======================================================
    JSON TRANSFORM
