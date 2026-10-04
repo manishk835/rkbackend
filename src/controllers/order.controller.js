@@ -1300,11 +1300,18 @@ exports.createRazorpayOrder = async (req, res) => {
           `rk_${order._id}`,
       });
 
-    order.paymentStatus =
-      "INITIATED";
+    // order.paymentStatus =
+    //   "INITIATED";
 
+    // await order.save();
+    order.paymentStatus = "INITIATED";
+
+    order.razorpay = {
+      ...order.razorpay,
+      orderId: razorpayOrder.id,
+    };
+    
     await order.save();
-
     return res.json({
       id: razorpayOrder.id,
       amount:
@@ -1335,9 +1342,116 @@ exports.createRazorpayOrder = async (req, res) => {
    VERIFY PAYMENT
 ====================================================== */
 
+// exports.verifyRazorpayPayment = async (req, res) => {
+//   try {
+
+//     const {
+//       razorpay_order_id,
+//       razorpay_payment_id,
+//       razorpay_signature,
+//       orderId,
+//     } = req.body;
+
+//     const order =
+//       await Order.findById(
+//         orderId
+//       );
+
+//     if (!order) {
+
+//       return res.status(404).json({
+//         message:
+//           "Order not found",
+//       });
+
+//     }
+
+//     if (
+//       order.paymentStatus ===
+//       "PAID"
+//     ) {
+
+//       return res.json({
+//         message:
+//           "Already verified",
+//       });
+
+//     }
+
+//     const body =
+//       razorpay_order_id +
+//       "|" +
+//       razorpay_payment_id;
+
+//     const expectedSignature =
+//       crypto
+//         .createHmac(
+//           "sha256",
+//           process.env
+//             .RAZORPAY_KEY_SECRET
+//         )
+//         .update(body)
+//         .digest("hex");
+
+//     if (
+//       expectedSignature !==
+//       razorpay_signature
+//     ) {
+
+//       order.paymentStatus =
+//         "FAILED";
+
+//       await order.save();
+
+//       return res.status(400).json({
+//         message:
+//           "Invalid signature",
+//       });
+
+//     }
+
+//     order.paymentStatus =
+//       "PAID";
+
+//     order.status =
+//       "Confirmed";
+
+//     order.razorpay = {
+//       orderId:
+//         razorpay_order_id,
+//       paymentId:
+//         razorpay_payment_id,
+//       signature:
+//         razorpay_signature,
+//     };
+
+//     order.statusHistory.push({
+//       status: "Confirmed",
+//       updatedAt: new Date(),
+//     });
+
+//     await order.save();
+
+//     return res.json({
+//       success: true,
+//     });
+
+//   } catch (error) {
+
+//     console.error(
+//       "Verify Error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       message:
+//         "Payment verification failed",
+//     });
+
+//   }
+// };
 exports.verifyRazorpayPayment = async (req, res) => {
   try {
-
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -1345,77 +1459,138 @@ exports.verifyRazorpayPayment = async (req, res) => {
       orderId,
     } = req.body;
 
-    const order =
-      await Order.findById(
-        orderId
-      );
+    // Validate required fields
+    if (
+      !mongoose.Types.ObjectId.isValid(orderId) ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment details",
+      });
+    }
+
+    // Find order
+    const order = await Order.findById(orderId);
 
     if (!order) {
-
       return res.status(404).json({
-        message:
-          "Order not found",
+        success: false,
+        message: "Order not found",
       });
-
     }
 
+    // Verify order ownership
     if (
-      order.paymentStatus ===
-      "PAID"
+      order.user.toString() !== req.user._id.toString()
     ) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
 
+    // Already paid
+    if (order.paymentStatus === "PAID") {
       return res.json({
-        message:
-          "Already verified",
+        success: true,
+        message: "Already verified",
       });
-
     }
 
-    const body =
-      razorpay_order_id +
-      "|" +
-      razorpay_payment_id;
+    // Check stored Razorpay Order ID
+    if (
+      !order.razorpay?.orderId ||
+      order.razorpay.orderId !== razorpay_order_id
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Razorpay order ID mismatch",
+      });
+    }
 
-    const expectedSignature =
-      crypto
-        .createHmac(
-          "sha256",
-          process.env
-            .RAZORPAY_KEY_SECRET
-        )
-        .update(body)
-        .digest("hex");
+    // Generate expected signature
+    const body =
+      razorpay_order_id + "|" + razorpay_payment_id;
+
+    const expectedSignature = crypto
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_KEY_SECRET
+      )
+      .update(body)
+      .digest("hex");
+
+    // Compare signatures safely
+    const expectedBuffer = Buffer.from(
+      expectedSignature,
+      "hex"
+    );
+
+    const receivedBuffer = Buffer.from(
+      razorpay_signature,
+      "hex"
+    );
 
     if (
-      expectedSignature !==
-      razorpay_signature
+      expectedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(
+        expectedBuffer,
+        receivedBuffer
+      )
     ) {
-
-      order.paymentStatus =
-        "FAILED";
-
-      await order.save();
-
       return res.status(400).json({
-        message:
-          "Invalid signature",
+        success: false,
+        message: "Invalid payment signature",
       });
-
     }
+    // Fetch actual payment details from Razorpay
+const payment = await razorpay.payments.fetch(
+  razorpay_payment_id
+);
 
-    order.paymentStatus =
-      "PAID";
+// Verify payment belongs to the same Razorpay order
+if (payment.order_id !== razorpay_order_id) {
+  return res.status(400).json({
+    success: false,
+    message: "Payment order mismatch",
+  });
+}
 
-    order.status =
-      "Confirmed";
+// Verify payment amount
+const expectedAmount = Math.round(
+  Number(order.totalAmount) * 100
+);
+
+if (
+  payment.amount !== expectedAmount ||
+  payment.currency !== "INR"
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Payment amount mismatch",
+  });
+}
+
+// Only captured payments can be marked as PAID
+if (payment.status !== "captured") {
+  return res.status(400).json({
+    success: false,
+    message: "Payment is not captured",
+  });
+}
+
+    // Mark payment successful
+    order.paymentStatus = "PAID";
+    order.status = "Confirmed";
 
     order.razorpay = {
-      orderId:
-        razorpay_order_id,
-      paymentId:
-        razorpay_payment_id,
-      signature:
-        razorpay_signature,
+      ...order.razorpay,
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
     };
 
     order.statusHistory.push({
@@ -1427,23 +1602,17 @@ exports.verifyRazorpayPayment = async (req, res) => {
 
     return res.json({
       success: true,
+      message: "Payment verified successfully",
     });
-
   } catch (error) {
-
-    console.error(
-      "Verify Error:",
-      error
-    );
+    console.error("Verify Error:", error);
 
     return res.status(500).json({
-      message:
-        "Payment verification failed",
+      success: false,
+      message: "Payment verification failed",
     });
-
   }
 };
-
 /* ======================================================
    REFUND PAYMENT
 ====================================================== */
